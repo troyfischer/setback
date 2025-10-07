@@ -19,7 +19,17 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 
-dependencies = []
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "python-jose[cryptography]",
+    "python-multipart",
+    "passlib[argon2]>=1.7.4",
+    "authlib>=1.6.4",
+    "httpx>=0.28.1",
+    "itsdangerous>=2.2.0",
+    "sqlmodel>=0.0.25",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -34,7 +44,7 @@ Homepage = "https://github.com/yourusername/your-app-name"
 Repository = "https://github.com/yourusername/your-app-name"
 
 [project.scripts]
-your-app = "your_app.main:main"
+your-app = "your_app.main:app"
 
 [tool.hatch.version]
 path = "src/your_app/__init__.py"
@@ -50,3 +60,5 @@ select = ["E", "W", "F", "I", "UP", "B"]
 
 [tool.mypy]
 strict = true
+python_executable = ".venv/bin/python"
+
