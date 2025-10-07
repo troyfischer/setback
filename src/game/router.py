@@ -37,19 +37,25 @@ class JoinRequest(BaseModel):
     secret: str
 
 
-class JoinSuccess(BaseModel):
-    status: str = "success"
-    player_id: str
+class GameRequest(BaseModel):
     game_id: int
 
 
-@router.post("/game/join")
-async def join_game(join: JoinRequest, request: Request, db: DBSession):
-    user = cast(SSOUser, request.state.user)
-
-    game = db.get(Game, join.id)
+async def get_game(req: GameRequest, db: DBSession) -> Game:
+    game = db.get(Game, req.game_id)
     if not game:
         raise HTTPException(404, "game id not found")
+    return game
+
+
+@router.post("/game/join")
+async def join_game(
+    join: JoinRequest,
+    request: Request,
+    db: DBSession,
+    game: Annotated[Game, Depends(get_game)],
+):
+    user = cast(SSOUser, request.state.user)
 
     if game.join_code != join.secret:
         raise HTTPException(400, "game join code does not match")
@@ -63,36 +69,37 @@ async def join_game(join: JoinRequest, request: Request, db: DBSession):
     return p
 
 
-class CreateTeamRequest(BaseModel):
-    game_id: int
-    owner: str
+class TeamRequest(GameRequest):
+    player: str
+
+
+async def get_player_in_game(req: TeamRequest, db: DBSession) -> Player:
+    player = db.get(Player, (req.player, req.game_id))
+    if not player:
+        raise HTTPException(404, f"{req.player} not an active player in game")
+    return player
 
 
 @router.post("/team/create")
-async def create_team(create: CreateTeamRequest, db: DBSession):
-    game = db.get(Game, create.game_id)
-    if not game:
-        raise HTTPException(404, "game id not found")
-
-    # check players are part of game
-    p = db.get(Player, (create.owner, game.id))
-    if not p:
-        raise HTTPException(404, create.owner + " not an active player in game")
-
+async def create_team(
+    db: DBSession,
+    game: Annotated[Game, Depends(get_game)],
+    player: Annotated[Player, Depends(get_player_in_game)],
+):
     # check if already owner of team
     team = db.exec(
-        select(Team).where(Team.game_id == game.id and Team.owner == p.id)
+        select(Team).where(Team.game_id == game.id and Team.owner == player.id)
     ).first()
     if team:
         raise HTTPException(400, "player already owner of team")
 
-    t = Team(game_id=game.id, owner=p.id)
+    t = Team(game_id=game.id, owner=player.id)
     db.add(t)
     db.commit()
     db.refresh(t)
 
     # owner should automatically be a member
-    tm = TeamMember(game_id=game.id, team_id=t.id, player_id=p.id)
+    tm = TeamMember(game_id=game.id, team_id=t.id, player_id=player.id)
     db.add(tm)
     db.commit()
 
@@ -101,27 +108,19 @@ async def create_team(create: CreateTeamRequest, db: DBSession):
 
 @router.post("/team/delete")
 async def delete_team(
-    create: CreateTeamRequest,
-    user: Annotated[SSOUser, Depends(get_current_user)],
+    req: TeamRequest,
     db: DBSession,
+    user: Annotated[SSOUser, Depends(get_current_user)],
+    game: Annotated[Game, Depends(get_game)],
+    player: Annotated[Player, Depends(get_player_in_game)],
 ):
-    game = db.get(Game, create.game_id)
-    if not game:
-        raise HTTPException(404, "game id not found")
-
-    if create.owner != user.sub:
+    if req.player != user.sub:
         raise HTTPException(403, "owner must delete team")
-
-    # check players are part of game
-    p = db.get(Player, (create.owner, game.id))
-    if not p:
-        raise HTTPException(404, create.owner + " not an active player in game")
 
     # check if owner of team
     team = db.exec(
-        select(Team).where(Team.game_id == game.id and Team.owner == p.id)
+        select(Team).where(Team.game_id == game.id and Team.owner == player.id)
     ).first()
-
     if not team:
         raise HTTPException(400, "team does not exist")
 
@@ -131,28 +130,38 @@ async def delete_team(
     return team
 
 
-class JoinTeamRequest(BaseModel):
-    game_id: int
+async def check_in_game(db: DBSession, sub: str, game_id: str | int):
+    player = db.get(Player, (sub, game_id))
+    if not player:
+        raise HTTPException(404, sub + " not an active player in game")
+    return player
+
+
+class UpdateTeamRequest(TeamRequest):
     team_id: int
-    player: str
+
+
+async def get_team(req: UpdateTeamRequest, db: DBSession) -> Team:
+    team = db.get(Team, req.team_id)
+    if not team:
+        raise HTTPException(404, "team does not exist")
+    return team
+
+
+async def get_member(req: UpdateTeamRequest, db: DBSession) -> TeamMember:
+    member = db.get(TeamMember, (req.game_id, req.team_id, req.player))
+    if not member:
+        raise HTTPException(404, "player not part of team")
+    return member
 
 
 @router.post("/team/join")
-async def join_team(join: JoinTeamRequest, db: DBSession):
-    game = db.get(Game, join.game_id)
-    if not game:
-        raise HTTPException(404, "game id not found")
-
-    # check player part of game
-    player = db.get(Player, (join.player, game.id))
-    if not player:
-        raise HTTPException(404, join.player + " not an active player in game")
-
-    # check team exists
-    team = db.get(Team, join.team_id)
-    if not team:
-        raise HTTPException(404, "team does not exist")
-
+async def join_team(
+    db: DBSession,
+    game: Annotated[Game, Depends(get_game)],
+    player: Annotated[Player, Depends(get_player_in_game)],
+    team: Annotated[Team, Depends(get_team)],
+):
     # check if already part of a team
     member = db.get(TeamMember, (game.id, team.id, player.id))
     if member:
@@ -166,28 +175,13 @@ async def join_team(join: JoinTeamRequest, db: DBSession):
     return tm
 
 
-class LeaveTeamRequest(BaseModel):
-    game_id: int
-    team_id: int
-    player: str
-
-
 @router.post("/team/leave")
-async def leave_team(leave: LeaveTeamRequest, db: DBSession):
-    game = db.get(Game, leave.team_id)
-    if not game:
-        raise HTTPException(404, "game id not found")
-
-    # check player is part of game
-    player = db.get(Player, (leave.player, game.id))
-    if not player:
-        raise HTTPException(404, leave.player + " not an active player in game")
-
-    # check team exists
-    team = db.get(Team, leave.team_id)
-    if not team:
-        raise HTTPException(404, "team does not exist")
-
+async def leave_team(
+    db: DBSession,
+    game: Annotated[Game, Depends(get_game)],
+    player: Annotated[Player, Depends(get_player_in_game)],
+    team: Annotated[Team, Depends(get_team)],
+):
     # check if part of a team
     member = db.get(TeamMember, (game.id, team.id, player.id))
     if not member:
