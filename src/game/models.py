@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from abc import ABCMeta, abstractmethod
 import datetime
 import enum
 import itertools
 import secrets
-from typing import Literal, Self, TypeVar, overload, override
+from abc import ABCMeta, abstractmethod
+from typing import Literal, override
 
 from pydantic import BaseModel
 from pydantic import Field as PydField
@@ -84,7 +84,7 @@ class Suit(enum.StrEnum):
     DIAMOND = "diamond"
 
     @property
-    def symbol(self):
+    def symbol(self) -> str:
         return {
             Suit.CLUB: "♣",
             Suit.HEART: "♥",
@@ -100,7 +100,7 @@ class FaceCard(enum.StrEnum):
     ACE = enum.auto()
 
     @property
-    def symbol(self):
+    def symbol(self) -> str:
         return {
             FaceCard.JACK: "J",
             FaceCard.QUEEN: "Q",
@@ -116,7 +116,7 @@ class Card(BaseModel):
 
     @override
     def __repr__(self) -> str:
-        def fmt(v: str, s: Suit):
+        def fmt(v: str, s: Suit) -> str:
             return f"{v}{s.symbol}"
 
         match self.value:
