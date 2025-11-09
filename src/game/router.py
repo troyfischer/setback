@@ -1,28 +1,35 @@
 from typing import Annotated, cast
 
+import redis
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import ValidationError
 from sqlmodel import select
 
 from src.auth.sso.models import SSOUser
 from src.auth.utils import get_current_user
 from src.db import DBSession
-from src.game.models import Game, Player, Team, TeamMember
+from src.game.manager import GameManager, InvalidGameStateException
+from src.game.models import (
+    BidRequest,
+    Game,
+    GameManagementRequest,
+    PlayCardRequest,
+    Player,
+    Team,
+    TeamMember,
+)
+from src.game.utils import get_game, get_player_in_game, get_team
 
 router = APIRouter(prefix="", dependencies=[Depends(get_current_user)])
+
+
+redis_client = redis.from_url("redis://localhost:6379")  # pyright: ignore[reportUnknownMemberType]
+gm = GameManager(redis_client)
 
 
 @router.post("/game/create")
 async def create(request: Request, db: DBSession):
     user = cast(SSOUser, request.state.user)
-    owned_games = list(db.exec(select(Game).where(Game.owner == user.sub)))
-
-    # for g in owned_games:
-    #     print(g)
-    #     db.delete(g)
-
-    # if len(owned_games) >= 2:
-    #     raise HTTPException(429, "user already owns 2 games")
 
     game = Game(owner=user.sub)
     db.add(game)
@@ -32,32 +39,30 @@ async def create(request: Request, db: DBSession):
     return game
 
 
-class JoinRequest(BaseModel):
-    id: int
-    secret: str
-
-
-class GameRequest(BaseModel):
-    game_id: int
-
-
-async def get_game(req: GameRequest, db: DBSession) -> Game:
-    game = db.get(Game, req.game_id)
-    if not game:
-        raise HTTPException(404, "game id not found")
+@router.post("/game/delete")
+async def delete(
+    request: Request,
+    db: DBSession,
+    game: Annotated[Game, Depends(get_game)],
+):
+    user = cast(SSOUser, request.state.user)
+    if game.owner != user.sub:
+        raise HTTPException(403, "only game owner may delete it")
+    db.delete(game)
+    db.commit()
     return game
 
 
 @router.post("/game/join")
 async def join_game(
-    join: JoinRequest,
+    req: GameManagementRequest,
     request: Request,
     db: DBSession,
     game: Annotated[Game, Depends(get_game)],
 ):
     user = cast(SSOUser, request.state.user)
 
-    if game.join_code != join.secret:
+    if game.join_code != req.secret:
         raise HTTPException(400, "game join code does not match")
 
     p = Player(game_id=game.id, id=user.sub)
@@ -69,15 +74,49 @@ async def join_game(
     return p
 
 
-class TeamRequest(GameRequest):
-    player: str
+@router.post("/game/start")
+def start_game(
+    db: DBSession,
+    game: Annotated[Game, Depends(get_game)],
+):
+    # TODO:
+    # 1. ensure at least X teams
+    # 2. ensure no empty teams
+    # 3. ensure minimum players
+
+    game_state = gm.start_game(game)
+
+    game.started = True
+    game = db.merge(game)
+    return game_state
 
 
-async def get_player_in_game(req: TeamRequest, db: DBSession) -> Player:
-    player = db.get(Player, (req.player, req.game_id))
-    if not player:
-        raise HTTPException(404, f"{req.player} not an active player in game")
-    return player
+@router.post("/game/bid")
+def bid_game(
+    req: BidRequest,
+    game: Annotated[Game, Depends(get_game)],
+    player: Annotated[Player, Depends(get_player_in_game)],
+):
+    try:
+        return gm.bid_game(game, player, req)
+    except InvalidGameStateException as e:
+        raise HTTPException(400, detail=str(e)) from e
+    except ValidationError as e:
+        raise HTTPException(400, detail=str(e)) from e
+
+
+@router.post("/game/trick/play")
+def play_trick(
+    req: PlayCardRequest,
+    game: Annotated[Game, Depends(get_game)],
+    player: Annotated[Player, Depends(get_player_in_game)],
+):
+    try:
+        return gm.play_card(game, player, req.card)
+    except InvalidGameStateException as e:
+        raise HTTPException(400, detail=str(e)) from e
+    except ValidationError as e:
+        raise HTTPException(400, detail=str(e)) from e
 
 
 @router.post("/team/create")
@@ -88,71 +127,48 @@ async def create_team(
 ):
     # check if already owner of team
     team = db.exec(
-        select(Team).where(Team.game_id == game.id and Team.owner == player.id)
+        select(Team).where((Team.game_id == game.id) & (Team.owner == player.id))
     ).first()
     if team:
         raise HTTPException(400, "player already owner of team")
 
     t = Team(game_id=game.id, owner=player.id)
+
     db.add(t)
-    db.commit()
+    db.flush()
     db.refresh(t)
 
     # owner should automatically be a member
     tm = TeamMember(game_id=game.id, team_id=t.id, player_id=player.id)
     db.add(tm)
     db.commit()
+    db.refresh(t)  # not entirely clear why I have to refresh again...
 
     return t
 
 
 @router.post("/team/delete")
 async def delete_team(
-    req: TeamRequest,
+    request: Request,
     db: DBSession,
     user: Annotated[SSOUser, Depends(get_current_user)],
     game: Annotated[Game, Depends(get_game)],
     player: Annotated[Player, Depends(get_player_in_game)],
 ):
-    if req.player != user.sub:
-        raise HTTPException(403, "owner must delete team")
+    user = cast(SSOUser, request.state.user)
 
-    # check if owner of team
     team = db.exec(
-        select(Team).where(Team.game_id == game.id and Team.owner == player.id)
+        select(Team).where((Team.game_id == game.id) & (Team.owner == player.id))
     ).first()
-    if not team:
+    if not team or team.owner != user.sub:
         raise HTTPException(400, "team does not exist")
+    if team.owner != user.sub:
+        raise HTTPException(403, "owner must delete team")
 
     db.delete(team)
     db.commit()
 
     return team
-
-
-async def check_in_game(db: DBSession, sub: str, game_id: str | int):
-    player = db.get(Player, (sub, game_id))
-    if not player:
-        raise HTTPException(404, sub + " not an active player in game")
-    return player
-
-
-class UpdateTeamRequest(TeamRequest):
-    team_id: int
-
-
-async def get_team(req: UpdateTeamRequest, db: DBSession) -> Team:
-    team = db.get(Team, req.team_id)
-    if not team:
-        raise HTTPException(404, "team does not exist")
-    return team
-
-
-async def get_member(req: UpdateTeamRequest, db: DBSession) -> TeamMember:
-    member = db.get(TeamMember, (req.game_id, req.team_id, req.player))
-    if not member:
-        raise HTTPException(404, "player not part of team")
-    return member
 
 
 @router.post("/team/join")
@@ -162,10 +178,9 @@ async def join_team(
     player: Annotated[Player, Depends(get_player_in_game)],
     team: Annotated[Team, Depends(get_team)],
 ):
-    # check if already part of a team
     member = db.get(TeamMember, (game.id, team.id, player.id))
     if member:
-        raise HTTPException(400, "player already part of a team")
+        return member
 
     tm = TeamMember(game_id=game.id, team_id=team.id, player_id=player.id)
     db.add(tm)
@@ -182,7 +197,6 @@ async def leave_team(
     player: Annotated[Player, Depends(get_player_in_game)],
     team: Annotated[Team, Depends(get_team)],
 ):
-    # check if part of a team
     member = db.get(TeamMember, (game.id, team.id, player.id))
     if not member:
         raise HTTPException(400, "player not part of team")
