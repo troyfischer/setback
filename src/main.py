@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,12 +9,22 @@ from starlette.middleware.sessions import SessionMiddleware
 import src.auth.router
 import src.game.router
 from src.db import create_db_and_tables
+from src.game.websocket import RedisSubscriber, connection_manager
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     create_db_and_tables()
+
+    # Start Redis subscriber for pub/sub
+    redis_url = "redis://localhost:6379"
+    subscriber = RedisSubscriber(redis_url, connection_manager)
+    await subscriber.start()
+
     yield
+
+    # Cleanup on shutdown
+    await subscriber.stop()
 
 
 app = FastAPI(

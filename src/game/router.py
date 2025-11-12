@@ -1,14 +1,22 @@
 from typing import Annotated, cast
 
 import redis
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from pydantic import ValidationError
 from sqlmodel import select
 
 from src.auth.sso.models import SSOUser
-from src.auth.utils import get_current_user
+from src.auth.utils import get_cm, get_current_user
 from src.db import DBSession
-from src.game.manager import GameManager, InvalidGameStateException
+from src.game.exceptions import InvalidGameStateException
+from src.game.manager import GameManager
 from src.game.models import (
     BidRequest,
     Game,
@@ -19,11 +27,16 @@ from src.game.models import (
     TeamMember,
 )
 from src.game.utils import get_game, get_player_in_game, get_team
+from src.game.websocket import connection_manager
+from src.logging import new_logger
+
+logger = new_logger(__name__)
 
 router = APIRouter(prefix="", dependencies=[Depends(get_current_user)])
 
 
 redis_client = redis.from_url("redis://localhost:6379")  # pyright: ignore[reportUnknownMemberType]
+print(redis_client)
 gm = GameManager(redis_client)
 
 
@@ -205,3 +218,39 @@ async def leave_team(
     db.commit()
 
     return member
+
+
+@router.websocket("/game/{game_id}/subscribe")
+async def game_subscribe(
+    request: Request, websocket: WebSocket, game_id: int, db: DBSession
+):
+    """
+    WebSocket endpoint for clients to subscribe to game updates.
+
+    Clients should connect to this endpoint after joining a game to receive
+    real-time updates about bids, card plays, and game state changes.
+    """
+    # Verify the game exists
+    game = db.get(Game, game_id)
+    if not game:
+        await websocket.close(code=1008, reason="Game not found")
+        return
+
+    # TODO: Verify the user is a player in this game
+    # For now, we'll allow anyone to subscribe (you can add auth later)
+
+    await get_cm(request).connect(game_id, websocket)
+
+    try:
+        # Keep the connection alive and handle any incoming messages
+        # (though clients shouldn't send messages - they use REST for actions)
+        while True:
+            # Just receive to keep connection alive
+            # Clients shouldn't send data here, but we need to await something
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        logger.info("client disconnected", game_id=game_id)
+    except Exception as e:
+        logger.error("websocket error", game_id=game_id, error=str(e))
+    finally:
+        connection_manager.disconnect(game_id, websocket)

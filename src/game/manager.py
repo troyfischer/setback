@@ -6,12 +6,12 @@ from collections import defaultdict
 from collections.abc import Generator
 from contextlib import contextmanager
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Literal, Self, cast, final, overload, override
+from typing import Literal, Self, cast, final, overload, override
 
 import redis
-import structlog
 from pydantic import BaseModel, Field
 from sqlmodel import select
+from structlog.types import FilteringBoundLogger
 
 from src.db import get_session_ctx
 from src.game.exceptions import (
@@ -30,15 +30,12 @@ from src.game.models import (
     Team,
     TeamMember,
 )
+from src.game.types import PlayerId, TeamId
+from src.logging import new_logger
 
 """
 TODO: dealer can steal the bid if a player before passes and it is at least 2
 """
-
-
-PlayerId = str
-GameId = int
-TeamId = int
 
 
 class RoundScore(BaseModel):
@@ -47,10 +44,17 @@ class RoundScore(BaseModel):
     jack: tuple[TeamId, PlayedCard] | None
     game: tuple[TeamId, int]
 
-    def as_list(self) -> Generator[TeamId, None, None]:
-        for t in [self.high, self.low, self.game, self.jack]:
-            if t:
-                yield t[0]
+    @property
+    def non_null_fields(self) -> Generator[tuple[TeamId, PlayedCard | int], None, None]:
+        for f in RoundScore.model_fields:
+            v = cast(tuple[TeamId, PlayedCard | int], getattr(self, f))
+            if v:
+                yield v
+
+    @property
+    def winning_teams(self) -> Generator[TeamId, None, None]:
+        for t in self.non_null_fields:
+            yield t[0]
 
 
 class PlayedCard(SetbackCard):
@@ -111,22 +115,12 @@ class Bid(BaseModel):
     player_id: PlayerId
 
 
-if TYPE_CHECKING:
-    from typing import Protocol
-
-    class LoggerProtocol(Protocol):
-        def debug(self, msg: str, **kwargs: Any) -> None: ...  # pyright: ignore[reportAny, reportExplicitAny]
-        def info(self, msg: str, **kwargs: Any) -> None: ...  # pyright: ignore[reportAny, reportExplicitAny]
-        def warning(self, msg: str, **kwargs: Any) -> None: ...  # pyright: ignore[reportAny, reportExplicitAny]
-        def error(self, msg: str, **kwargs: Any) -> None: ...  # pyright: ignore[reportAny, reportExplicitAny]
-
-
 class GameModel(BaseModel):
     game_id: int
 
     @cached_property
-    def log(self) -> LoggerProtocol:
-        return structlog.get_logger(self.__class__.__name__, game_id=self.game_id)  # type: ignore
+    def log(self) -> FilteringBoundLogger:
+        return new_logger(self.__class__.__name__, game_id=self.game_id)
 
 
 class TurnBased[Item](GameModel):
@@ -173,12 +167,15 @@ class Trick(TurnBased[PlayedCard]):
             or not any(c.suit == first_played.suit for c in hand)
         )
 
-    def best_card(self, trump: Suit | None = None) -> PlayedCard:
+    def best_card(self, trump: Suit) -> PlayedCard:
         """
         If a trump card is played in a trick then the best card is the highest
         trump. Otherwise the best card is the highest value card that matches
         the suit of the first card played of in the trick.
         """
+
+        if not self.collection:
+            raise InvalidGameStateException("cannot get best card from empty trick")
 
         trumps = [card for card in self.collection if card.suit == trump]
         first_suits = [
@@ -197,6 +194,11 @@ class Trick(TurnBased[PlayedCard]):
 class BidRound(TurnBased[Bid]):
     @property
     def highest_bid(self) -> Bid:
+        if not self.collection:
+            raise InvalidGameStateException(
+                "cannot get highest bid from empty bid round"
+            )
+
         return max(self.collection, key=lambda b: b.amount)
 
 
@@ -394,7 +396,7 @@ class GameState(GameModel):
         self.rounds.append(self.active_round)
 
         team_scores: defaultdict[TeamId, int] = defaultdict(int)
-        for team_id in score.as_list():
+        for team_id in score.winning_teams:
             team_scores[team_id] += 1
             self.score[team_id] = self.score.get(team_id, 0) + 1
 
@@ -477,6 +479,41 @@ class GameManager:
 
     def __init__(self, redis_client: redis.Redis):
         self.redis = redis_client
+        self.log = new_logger(self.__class__.__name__)
+
+    def _publish_event(self, event_type: str, game_state: GameState) -> None:
+        """
+        Publish a game event to Redis pub/sub.
+
+        This allows all server instances to receive the event and broadcast
+        to their connected WebSocket clients.
+        """
+        from src.game.events import EventType, GameEvent, RedisChannels
+
+        try:
+            event = GameEvent(
+                event_type=EventType(event_type),
+                game_id=game_state.game_id,
+                data=game_state.model_dump(),
+            )
+
+            channel = RedisChannels.game(game_state.game_id)
+            pub = cast(bool, self.redis.publish(channel, event.model_dump_json()))
+            if not pub:
+                raise Exception("unknown redis error")
+            self.log.debug(
+                "published event to redis",
+                event_type=event_type,
+                game_id=game_state.game_id,
+                channel=channel,
+            )
+        except Exception as e:
+            self.log.error(
+                "failed to publish event",
+                error=str(e),
+                event_type=event_type,
+                game_id=game_state.game_id,
+            )
 
     def start_game(self, game: Game) -> GameState:
         with get_session_ctx() as db:
@@ -513,6 +550,7 @@ class GameManager:
         )
 
         self._save_state(gs)
+        self._publish_event("game_started", gs)
 
         return gs
 
@@ -566,9 +604,11 @@ class GameManager:
     def bid_game(self, game: Game, player: Player, bid: BidRequest) -> GameState:
         with self._game_state_context(game, Phase.BID, player.id) as gs:
             gs.process_bid(Bid(amount=bid.amount, player_id=player.id))
+            self._publish_event("bid_placed", gs)
         return gs
 
     def play_card(self, game: Game, player: Player, card: SetbackCard) -> GameState:
         with self._game_state_context(game, Phase.PLAY, player.id) as gs:
             gs.process_card(card, player.id)
+            self._publish_event("card_played", gs)
         return gs

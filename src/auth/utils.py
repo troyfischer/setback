@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials
@@ -7,6 +7,7 @@ from src.auth.jwt import JWT, JwtManager, get_jwt_manager
 from src.auth.models import Claims
 from src.auth.sso.models import SSOUser
 from src.db import DBSession
+from src.game.websocket import ConnectionManager
 
 
 async def validate_access_token(
@@ -34,3 +35,7 @@ async def get_current_user(
 
     request.state.user = user
     return user
+
+
+def get_cm(request: Request) -> ConnectionManager:
+    return cast(ConnectionManager, request.app.state.connection_manager)  # pyright: ignore[reportAny]

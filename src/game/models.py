@@ -154,11 +154,16 @@ class Card(BaseModel):
         return False
 
     @staticmethod
-    def NULL() -> Card:
+    def JOKER() -> Card:
+        class Joker(Card):
+            @override
+            def __repr__(self) -> str:
+                return "JOKER"
+
         """
         A card that can be used in place of None for initial comparisons.
         """
-        return Card(value=1, suit=Suit.CLUB, null=True)
+        return Joker.model_construct(value=1, suit=None, null=True)
 
 
 class SetbackCard(Card):
