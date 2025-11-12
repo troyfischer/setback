@@ -5,12 +5,12 @@ from typing import final, override
 from starlette.requests import Request
 
 from src.auth.models import Credentials
-from src.auth.sso.base import SSOProvider, oauth
+from src.auth.sso.base import OAuthProvider, oauth
 from src.auth.sso.models import SSOUser
 
 
 @final
-class GoogleSSO(SSOProvider):
+class GoogleOAuth(OAuthProvider):
     def __init__(self):
         creds = self.load_creds()
 

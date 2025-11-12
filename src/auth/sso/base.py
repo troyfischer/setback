@@ -1,14 +1,16 @@
 from abc import ABC, abstractmethod
 
-from authlib.integrations.starlette_client import OAuth
+from authlib.integrations.starlette_client import (  # pyright: ignore[reportMissingTypeStubs]
+    OAuth,
+)
 from starlette.config import Config
 from starlette.requests import Request
 
 config = Config()
-oauth = OAuth(config)
+oauth = OAuth(config=config)
 
 
-class SSOProvider(ABC):
+class OAuthProvider(ABC):
     @property
     @abstractmethod
     def provider(self) -> str: ...

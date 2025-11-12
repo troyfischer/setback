@@ -8,14 +8,14 @@ from starlette.requests import Request
 
 from src.auth.jwt import JwtManager
 from src.auth.models import Token
-from src.auth.sso import GoogleSSO
+from src.auth.sso import GoogleOAuth
 from src.auth.sso.models import SSOUser
 from src.auth.utils import get_current_user
 from src.db import DBSession
 
 router = APIRouter(prefix="/auth")
 
-_handlers = {h.provider: h for h in [GoogleSSO()]}
+_handlers = {h.provider: h for h in [GoogleOAuth()]}
 
 
 @router.get("/{provider}/login")

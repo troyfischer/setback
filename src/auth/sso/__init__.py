@@ -1,3 +1,3 @@
-from .google import GoogleSSO
+from .google import GoogleOAuth
 
-__all__ = ["GoogleSSO"]
+__all__ = ["GoogleOAuth"]
