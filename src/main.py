@@ -3,22 +3,45 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+import redis
 from fastapi import FastAPI
+from pydantic_settings import BaseSettings
+from sqlalchemy import Engine
+from sqlmodel import SQLModel, create_engine
 from starlette.middleware.sessions import SessionMiddleware
 
 import src.auth.router
 import src.game.router
-from src.db import create_db_and_tables
-from src.game.websocket import RedisSubscriber, connection_manager
+from src.game.manager import GameManager
+from src.game.websocket import ConnectionManager, RedisSubscriber
+
+
+class Settings(BaseSettings):
+    database_url: str = "sqlite:///database.db"
+    redis_url: str = "redis://localhost:6379"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    create_db_and_tables()
+    settings = Settings()
+
+    # relational db
+    connect_args = {"check_same_thread": False}
+    engine: Engine = create_engine(settings.database_url, connect_args=connect_args)
+    SQLModel.metadata.create_all(engine)
+    app.state.db_engine = engine
+
+    # redis
+    redis_client = redis.from_url(settings.redis_url)  # pyright: ignore[reportUnknownMemberType]
+    gm = GameManager(redis_client, engine)
+    app.state.gm = gm
+
+    # websocket connection management
+    cm = ConnectionManager()
+    app.state.cm = cm
 
     # Start Redis subscriber for pub/sub
-    redis_url = "redis://localhost:6379"
-    subscriber = RedisSubscriber(redis_url, connection_manager)
+    subscriber = RedisSubscriber(settings.redis_url, cm)
     await subscriber.start()
 
     yield
@@ -28,7 +51,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(
-    title="Your App Name",
+    title="Setback",
     description="A FastAPI app with JWT authentication",
     version="0.1.0",
     lifespan=lifespan,
