@@ -6,7 +6,7 @@ from starlette.requests import Request
 
 from src.auth.models import Credentials
 from src.auth.sso.base import OAuthProvider, oauth
-from src.auth.sso.models import SSOUser
+from src.auth.sso.models import OAuthUser
 
 
 @final
@@ -54,4 +54,4 @@ class GoogleOAuth(OAuthProvider):
     async def callback(self, request: Request):
         token = await self.client.authorize_access_token(request)
 
-        return SSOUser.model_validate(token["userinfo"])
+        return OAuthUser.model_validate(token["userinfo"])

@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlmodel import Field, SQLModel
 
 
-class SSOUser(SQLModel, table=True):
+class OAuthUser(SQLModel, table=True):
     at_hash: str
     aud: str
     azp: str

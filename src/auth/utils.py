@@ -5,7 +5,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 
 from src.auth.jwt import JWT, JwtManager, get_jwt_manager
 from src.auth.models import Claims
-from src.auth.sso.models import SSOUser
+from src.auth.sso.models import OAuthUser
 from src.db import DBSession
 
 
@@ -27,8 +27,8 @@ async def get_current_user(
     request: Request,
     claims: Annotated[Claims, Depends(validate_access_token)],
     db: DBSession,
-) -> SSOUser:
-    user = db.get(SSOUser, claims["sub"])
+) -> OAuthUser:
+    user = db.get(OAuthUser, claims["sub"])
     if not user:
         raise HTTPException(401, "unknown user")
 

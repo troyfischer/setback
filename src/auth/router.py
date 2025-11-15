@@ -9,7 +9,7 @@ from starlette.requests import Request
 from src.auth.jwt import JwtManager
 from src.auth.models import Token
 from src.auth.sso import GoogleOAuth
-from src.auth.sso.models import SSOUser
+from src.auth.sso.models import OAuthUser
 from src.auth.utils import get_current_user
 from src.db import DBSession
 
@@ -56,7 +56,7 @@ async def refresh(request: Request, db: DBSession, jwt: JwtManager):
     rt = request.cookies.get("refresh_token")
     claims = jwt.validate_refresh_token(rt or "")
 
-    user = db.get(SSOUser, claims["sub"])
+    user = db.get(OAuthUser, claims["sub"])
     if not user:
         raise HTTPException(401, "User not found")
     elif not user.logged_in:
@@ -69,7 +69,7 @@ async def refresh(request: Request, db: DBSession, jwt: JwtManager):
 
 
 @router.get("/logout")
-async def logout(user: Annotated[SSOUser, Depends(get_current_user)], db: DBSession):
+async def logout(user: Annotated[OAuthUser, Depends(get_current_user)], db: DBSession):
     user.logged_in = False
     _ = db.merge(user)
     db.commit()
@@ -84,7 +84,7 @@ async def dev_token(
     jwt: JwtManager,
 ):
     token = jwt.create_access_token(form_data.username)
-    user = SSOUser(
+    user = OAuthUser(
         at_hash="test",
         aud="test",
         azp="test",
