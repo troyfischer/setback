@@ -5,8 +5,7 @@ WebSocket connection management and Redis pub/sub integration.
 from __future__ import annotations
 
 import asyncio
-import json
-from typing import Any, final
+from typing import Any, TypedDict, final
 
 import redis.asyncio as redis
 from fastapi import WebSocket
@@ -87,6 +86,12 @@ class ConnectionManager:
             self.disconnect(game_id, conn)
 
 
+class WSMessage(TypedDict):
+    channel: bytes
+    data: bytes
+    type: str
+
+
 @final
 class RedisSubscriber:
     """
@@ -101,9 +106,8 @@ class RedisSubscriber:
     ):
         self.redis_url = redis_url
         self.connection_manager = connection_manager
-        self.redis_client = redis.from_url(self.redis_url)
-        print(self.redis_client)
-        self.pubsub = self.redis_client.pubsub()
+        self.redis_client = redis.from_url(self.redis_url)  # pyright: ignore[reportUnknownMemberType]
+        self.pubsub = self.redis_client.pubsub()  # pyright: ignore[reportUnknownMemberType]
         self._running = False
 
     async def start(self) -> None:
@@ -116,13 +120,13 @@ class RedisSubscriber:
         await self.pubsub.psubscribe("game:*")
 
         # Start listening loop
-        asyncio.create_task(self._listen())
+        _ = asyncio.create_task(self._listen())
 
     async def stop(self) -> None:
         """Stop the Redis subscriber"""
         self._running = False
         if self.pubsub:
-            await self.pubsub.unsubscribe()
+            await self.pubsub.unsubscribe()  # pyright: ignore[reportUnknownMemberType]
             await self.pubsub.aclose()
         if self.redis_client:
             await self.redis_client.aclose()
@@ -139,16 +143,18 @@ class RedisSubscriber:
         try:
             while self._running:
                 message = await self.pubsub.get_message(
-                    ignore_subscribe_messages=True, timeout=1.0
+                    ignore_subscribe_messages=True,
+                    timeout=1.0,
                 )
+
                 if message and message["type"] == "pmessage":
-                    await self._handle_message(message)
+                    await self._handle_message(message)  # pyright: ignore[reportArgumentType]
         except Exception as e:
             logger.error("error in redis subscriber loop", error=str(e))
         finally:
             logger.info("redis subscriber loop exited")
 
-    async def _handle_message(self, message: dict[str, Any]) -> None:
+    async def _handle_message(self, message: WSMessage) -> None:
         """
         Handle a message from Redis and broadcast to relevant WebSocket clients.
         """
@@ -158,8 +164,7 @@ class RedisSubscriber:
             game_id = int(channel.split(":")[1])
 
             # Parse the event
-            data = json.loads(message["data"])
-            event = GameEvent.model_validate(data)
+            event = GameEvent.model_validate_json(message["data"])
 
             logger.debug(
                 "received redis event",
@@ -175,5 +180,4 @@ class RedisSubscriber:
 
 
 # Global instances (will be initialized in main.py)
-connection_manager = ConnectionManager()
 redis_subscriber: RedisSubscriber | None = None

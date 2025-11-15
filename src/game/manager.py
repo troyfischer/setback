@@ -10,10 +10,10 @@ from typing import Literal, Self, cast, final, overload, override
 
 import redis
 from pydantic import BaseModel, Field
-from sqlmodel import select
+from sqlalchemy import Engine
+from sqlmodel import Session, select
 from structlog.types import FilteringBoundLogger
 
-from src.db import get_session_ctx
 from src.game.exceptions import (
     InvalidCardException,
     InvalidGameStateException,
@@ -477,8 +477,9 @@ class GameManager:
     The game manager controls game state. It accesses and stores the state in redis.
     """
 
-    def __init__(self, redis_client: redis.Redis):
+    def __init__(self, redis_client: redis.Redis, engine: Engine):
         self.redis = redis_client
+        self.engine = engine
         self.log = new_logger(self.__class__.__name__)
 
     def _publish_event(self, event_type: str, game_state: GameState) -> None:
@@ -516,7 +517,7 @@ class GameManager:
             )
 
     def start_game(self, game: Game) -> GameState:
-        with get_session_ctx() as db:
+        with Session(self.engine) as db:
             teams = list(db.exec(select(Team).where(Team.game_id == game.id)).all())
             members: dict[int, list[TeamMember]] = defaultdict(list)
             for team in teams:

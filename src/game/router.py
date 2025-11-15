@@ -1,6 +1,5 @@
 from typing import Annotated, cast
 
-import redis
 from fastapi import (
     APIRouter,
     Depends,
@@ -12,11 +11,10 @@ from fastapi import (
 from pydantic import ValidationError
 from sqlmodel import select
 
-from src.auth.sso.models import SSOUser
-from src.auth.utils import get_cm, get_current_user
+from src.auth.sso.models import OAuthUser
+from src.auth.utils import get_current_user
 from src.db import DBSession
 from src.game.exceptions import InvalidGameStateException
-from src.game.manager import GameManager
 from src.game.models import (
     BidRequest,
     Game,
@@ -27,22 +25,17 @@ from src.game.models import (
     TeamMember,
 )
 from src.game.utils import get_game, get_player_in_game, get_team
-from src.game.websocket import connection_manager
 from src.logging import new_logger
+from src.request import RequestContext
 
 logger = new_logger(__name__)
 
 router = APIRouter(prefix="", dependencies=[Depends(get_current_user)])
 
 
-redis_client = redis.from_url("redis://localhost:6379")  # pyright: ignore[reportUnknownMemberType]
-print(redis_client)
-gm = GameManager(redis_client)
-
-
 @router.post("/game/create")
 async def create(request: Request, db: DBSession):
-    user = cast(SSOUser, request.state.user)
+    user = cast(OAuthUser, request.state.user)
 
     game = Game(owner=user.sub)
     db.add(game)
@@ -54,11 +47,10 @@ async def create(request: Request, db: DBSession):
 
 @router.post("/game/delete")
 async def delete(
-    request: Request,
+    user: Annotated[OAuthUser, Depends(get_current_user)],
     db: DBSession,
     game: Annotated[Game, Depends(get_game)],
 ):
-    user = cast(SSOUser, request.state.user)
     if game.owner != user.sub:
         raise HTTPException(403, "only game owner may delete it")
     db.delete(game)
@@ -73,7 +65,7 @@ async def join_game(
     db: DBSession,
     game: Annotated[Game, Depends(get_game)],
 ):
-    user = cast(SSOUser, request.state.user)
+    user = cast(OAuthUser, request.state.user)
 
     if game.join_code != req.secret:
         raise HTTPException(400, "game join code does not match")
@@ -89,6 +81,7 @@ async def join_game(
 
 @router.post("/game/start")
 def start_game(
+    ctx: RequestContext,
     db: DBSession,
     game: Annotated[Game, Depends(get_game)],
 ):
@@ -97,7 +90,7 @@ def start_game(
     # 2. ensure no empty teams
     # 3. ensure minimum players
 
-    game_state = gm.start_game(game)
+    game_state = ctx.gm.start_game(game)
 
     game.started = True
     game = db.merge(game)
@@ -106,12 +99,13 @@ def start_game(
 
 @router.post("/game/bid")
 def bid_game(
+    ctx: RequestContext,
     req: BidRequest,
     game: Annotated[Game, Depends(get_game)],
     player: Annotated[Player, Depends(get_player_in_game)],
 ):
     try:
-        return gm.bid_game(game, player, req)
+        return ctx.gm.bid_game(game, player, req)
     except InvalidGameStateException as e:
         raise HTTPException(400, detail=str(e)) from e
     except ValidationError as e:
@@ -120,12 +114,13 @@ def bid_game(
 
 @router.post("/game/trick/play")
 def play_trick(
+    ctx: RequestContext,
     req: PlayCardRequest,
     game: Annotated[Game, Depends(get_game)],
     player: Annotated[Player, Depends(get_player_in_game)],
 ):
     try:
-        return gm.play_card(game, player, req.card)
+        return ctx.gm.play_card(game, player, req.card)
     except InvalidGameStateException as e:
         raise HTTPException(400, detail=str(e)) from e
     except ValidationError as e:
@@ -162,14 +157,11 @@ async def create_team(
 
 @router.post("/team/delete")
 async def delete_team(
-    request: Request,
     db: DBSession,
-    user: Annotated[SSOUser, Depends(get_current_user)],
+    user: Annotated[OAuthUser, Depends(get_current_user)],
     game: Annotated[Game, Depends(get_game)],
     player: Annotated[Player, Depends(get_player_in_game)],
 ):
-    user = cast(SSOUser, request.state.user)
-
     team = db.exec(
         select(Team).where((Team.game_id == game.id) & (Team.owner == player.id))
     ).first()
@@ -222,7 +214,10 @@ async def leave_team(
 
 @router.websocket("/game/{game_id}/subscribe")
 async def game_subscribe(
-    request: Request, websocket: WebSocket, game_id: int, db: DBSession
+    ctx: RequestContext,
+    websocket: WebSocket,
+    game_id: int,
+    db: DBSession,
 ):
     """
     WebSocket endpoint for clients to subscribe to game updates.
@@ -239,7 +234,7 @@ async def game_subscribe(
     # TODO: Verify the user is a player in this game
     # For now, we'll allow anyone to subscribe (you can add auth later)
 
-    await get_cm(request).connect(game_id, websocket)
+    await ctx.cm.connect(game_id, websocket)
 
     try:
         # Keep the connection alive and handle any incoming messages
@@ -247,10 +242,10 @@ async def game_subscribe(
         while True:
             # Just receive to keep connection alive
             # Clients shouldn't send data here, but we need to await something
-            await websocket.receive_text()
+            _ = await websocket.receive_text()
     except WebSocketDisconnect:
         logger.info("client disconnected", game_id=game_id)
     except Exception as e:
         logger.error("websocket error", game_id=game_id, error=str(e))
     finally:
-        connection_manager.disconnect(game_id, websocket)
+        ctx.cm.disconnect(game_id, websocket)
