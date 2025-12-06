@@ -60,7 +60,7 @@ class ConnectionManager:
         """
         if game_id not in self.active_connections:
             logger.debug(
-                "received broadcast for game id not in my connections",
+                "no active websocket connections for game id",
                 game_id=game_id,
             )
             return
@@ -101,12 +101,11 @@ class RedisSubscriber:
 
     def __init__(
         self,
-        redis_url: str,
+        redis_client: redis.Redis,
         connection_manager: ConnectionManager,
     ):
-        self.redis_url = redis_url
+        self.redis_client = redis_client
         self.connection_manager = connection_manager
-        self.redis_client = redis.from_url(self.redis_url)  # pyright: ignore[reportUnknownMemberType]
         self.pubsub = self.redis_client.pubsub()  # pyright: ignore[reportUnknownMemberType]
         self._running = False
 

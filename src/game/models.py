@@ -21,19 +21,19 @@ class Game(SQLModel, table=True):
     created_at: datetime.datetime = SqlField(
         default_factory=lambda: datetime.datetime.now(tz=datetime.UTC)
     )
-    owner: str = SqlField(foreign_key="ssouser.sub")
+    owner: str = SqlField(foreign_key="oauthuser.sub")
     started: bool = False
 
 
 class Player(SQLModel, table=True):
-    id: str = SqlField(foreign_key="ssouser.sub", primary_key=True)
+    id: str = SqlField(foreign_key="oauthuser.sub", primary_key=True)
     game_id: int = SqlField(foreign_key="game.id", primary_key=True)
 
 
 class Team(SQLModel, table=True):
     id: int = SqlField(default=None, primary_key=True)
     game_id: int = SqlField(foreign_key="game.id")
-    owner: str = SqlField(foreign_key="ssouser.sub")
+    owner: str = SqlField(foreign_key="oauthuser.sub")
 
 
 class TeamMember(SQLModel, table=True):

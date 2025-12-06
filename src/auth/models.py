@@ -17,7 +17,7 @@ class Token(BaseModel):
 
 
 class RefreshToken(SQLModel, table=True):
-    sub: str = Field(primary_key=True, foreign_key="ssouser.sub")
+    sub: str = Field(primary_key=True, foreign_key="oauthuser.sub")
     token: str
 
 

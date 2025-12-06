@@ -1,3 +1,6 @@
+# useful for my emacs virtual environment package only
+Pipfile
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

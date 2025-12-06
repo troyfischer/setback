@@ -1,10 +1,13 @@
+# type: ignore
+# pyright: basic
+
 import itertools
 from http import HTTPStatus
-import random
-from urllib.parse import urljoin
 
-import httpx
 import pytest
+from fakeredis import FakeRedis
+from fakeredis.aioredis import FakeRedis as AsyncFakeRedis
+from fastapi.testclient import TestClient
 
 from src.game.manager import GameState, Phase
 from src.game.models import (
@@ -16,10 +19,28 @@ from src.game.models import (
     Team,
     UpdateTeamRequest,
 )
+from src.main import app
 
 USERS = [f"user{i}" for i in range(6)]
 
-BASE_URL = "http://localhost:8000/"
+
+@pytest.fixture(scope="session", autouse=True)
+def patch_redis():
+    from pytest import MonkeyPatch
+
+    mp = MonkeyPatch()
+    fake = FakeRedis()
+    async_fake = AsyncFakeRedis()
+    mp.setattr("src.main.redis_async.from_url", lambda url: async_fake)
+    mp.setattr("src.main.redis.from_url", lambda url: fake)
+    yield fake
+    mp.undo()
+
+
+@pytest.fixture(scope="session")
+def client():
+    with TestClient(app) as c:
+        yield c
 
 
 authenticated_users: dict[str, str] = {}
@@ -31,10 +52,10 @@ def print_first_line():
     print()
 
 
-def create_users() -> None:
+def create_users(client: TestClient) -> None:
     for user in USERS:
-        res = httpx.post(
-            urljoin(BASE_URL, "/auth/token"),
+        res = client.post(
+            "/auth/token",
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             data={"username": user, "password": "testpassword"},
         )
@@ -45,12 +66,12 @@ def create_users() -> None:
         authenticated_users[user] = access_token
 
 
-@pytest.fixture(scope="module")
-def game():
-    create_users()
+@pytest.fixture
+def game(client: TestClient):
+    create_users(client)
 
-    res = httpx.post(
-        urljoin(BASE_URL, "/game/create"),
+    res = client.post(
+        "/game/create",
         headers={"Authorization": "Bearer " + authenticated_users[USERS[0]]},
     )
 
@@ -63,11 +84,11 @@ def test_game(game: Game):
     print(game)
 
 
-@pytest.fixture(scope="module")
-def join_game(game: Game):
+@pytest.fixture
+def join_game(client: TestClient, game: Game):
     for user in USERS:
-        res = httpx.post(
-            urljoin(BASE_URL, "/game/join"),
+        res = client.post(
+            "/game/join",
             headers={
                 "Authorization": "Bearer " + authenticated_users[user],
             },
@@ -79,12 +100,12 @@ def join_game(game: Game):
         assert res.status_code == HTTPStatus.OK
 
 
-@pytest.fixture(scope="module")
-def create_teams(game: Game, join_game) -> list[Team]:
+@pytest.fixture
+def create_teams(client: TestClient, game: Game, join_game) -> list[Team]:
     teams: list[Team] = []
     for owner, _ in itertools.batched(USERS, 2):
-        res = httpx.post(
-            urljoin(BASE_URL, "/team/create"),
+        res = client.post(
+            "/team/create",
             headers={
                 "Authorization": "Bearer " + authenticated_users[owner],
             },
@@ -96,12 +117,12 @@ def create_teams(game: Game, join_game) -> list[Team]:
     return teams
 
 
-@pytest.fixture(scope="module")
-def join_team(create_teams: list[Team]):
+@pytest.fixture
+def join_team(client: TestClient, create_teams: list[Team]):
     for team, members in zip(create_teams, itertools.batched(USERS, 2), strict=True):
         for member in members:
-            res = httpx.post(
-                urljoin(BASE_URL, "/team/join"),
+            res = client.post(
+                "/team/join",
                 headers={
                     "Authorization": "Bearer " + authenticated_users[member],
                 },
@@ -116,10 +137,10 @@ def test_join_team(join_team):
     pass
 
 
-@pytest.fixture(scope="module")
-def start_game(game: Game, join_team) -> GameState:
-    res = httpx.post(
-        urljoin(BASE_URL, "/game/start"),
+@pytest.fixture
+def start_game(client: TestClient, game: Game, join_team) -> GameState:
+    res = client.post(
+        "/game/start",
         headers={
             "Authorization": "Bearer " + authenticated_users[USERS[0]],
         },
@@ -130,12 +151,12 @@ def start_game(game: Game, join_team) -> GameState:
     return game_state
 
 
-def do_bidding(game_state: GameState) -> GameState:
+def do_bidding(client: TestClient, game_state: GameState) -> GameState:
     starting_turn = game_state.turn
 
     for _ in range(len(USERS)):
-        res = httpx.post(
-            urljoin(BASE_URL, "/game/bid"),
+        res = client.post(
+            "/game/bid",
             headers={
                 "Authorization": "Bearer "
                 + authenticated_users[game_state.order[game_state.turn].player_id],
@@ -152,16 +173,16 @@ def do_bidding(game_state: GameState) -> GameState:
     return game_state
 
 
-@pytest.fixture(scope="module")
-def bid_game(start_game: GameState) -> GameState:
-    return do_bidding(start_game)
+@pytest.fixture
+def bid_game(client: TestClient, start_game: GameState) -> GameState:
+    return do_bidding(client, start_game)
 
 
 def test_bid_game(bid_game):
     pass
 
 
-def test_play_single_trick(bid_game: GameState):
+def test_play_single_trick(client: TestClient, bid_game: GameState):
     game_state = bid_game
 
     print(game_state.order)
@@ -172,8 +193,8 @@ def test_play_single_trick(bid_game: GameState):
             if game_state.active_round.is_card_valid(possible_card):
                 card = possible_card
 
-        res = httpx.post(
-            urljoin(BASE_URL, "/game/trick/play"),
+        res = client.post(
+            "/game/trick/play",
             headers={
                 "Authorization": "Bearer "
                 + authenticated_users[game_state.order[game_state.turn].player_id],
@@ -198,12 +219,12 @@ def test_play_single_trick(bid_game: GameState):
             )
 
 
-def test_play_single_round(bid_game: GameState):
+def test_play_single_round(client: TestClient, bid_game: GameState):
     game_state = bid_game
 
     while game_state.phase != Phase.COMPLETE:
         if game_state.phase == Phase.BID:
-            game_state = do_bidding(game_state)
+            game_state = do_bidding(client, game_state)
 
         for _ in range(len(USERS)):
             card = game_state.active_round.current_hand[0]
@@ -211,8 +232,8 @@ def test_play_single_round(bid_game: GameState):
                 if game_state.active_round.is_card_valid(possible_card):
                     card = possible_card
 
-            res = httpx.post(
-                urljoin(BASE_URL, "/game/trick/play"),
+            res = client.post(
+                "/game/trick/play",
                 headers={
                     "Authorization": "Bearer "
                     + authenticated_users[game_state.order[game_state.turn].player_id],

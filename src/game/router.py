@@ -14,6 +14,7 @@ from sqlmodel import select
 from src.auth.sso.models import OAuthUser
 from src.auth.utils import get_current_user
 from src.db import DBSession
+from src.game.constants import Routes
 from src.game.exceptions import InvalidGameStateException
 from src.game.models import (
     BidRequest,
@@ -30,10 +31,11 @@ from src.request import RequestContext
 
 logger = new_logger(__name__)
 
-router = APIRouter(prefix="", dependencies=[Depends(get_current_user)])
+
+router = APIRouter(prefix=Routes.PREFIX, dependencies=[Depends(get_current_user)])
 
 
-@router.post("/game/create")
+@router.post(Routes.Game.CREATE)
 async def create(request: Request, db: DBSession):
     user = cast(OAuthUser, request.state.user)
 
@@ -45,7 +47,7 @@ async def create(request: Request, db: DBSession):
     return game
 
 
-@router.post("/game/delete")
+@router.post(Routes.Game.DELETE)
 async def delete(
     user: Annotated[OAuthUser, Depends(get_current_user)],
     db: DBSession,
@@ -58,7 +60,7 @@ async def delete(
     return game
 
 
-@router.post("/game/join")
+@router.post(Routes.Game.JOIN)
 async def join_game(
     req: GameManagementRequest,
     request: Request,
@@ -79,7 +81,7 @@ async def join_game(
     return p
 
 
-@router.post("/game/start")
+@router.post(Routes.Game.START)
 def start_game(
     ctx: RequestContext,
     db: DBSession,
@@ -97,7 +99,7 @@ def start_game(
     return game_state
 
 
-@router.post("/game/bid")
+@router.post(Routes.Game.BID)
 def bid_game(
     ctx: RequestContext,
     req: BidRequest,
@@ -112,7 +114,7 @@ def bid_game(
         raise HTTPException(400, detail=str(e)) from e
 
 
-@router.post("/game/trick/play")
+@router.post(Routes.Game.PLAY)
 def play_trick(
     ctx: RequestContext,
     req: PlayCardRequest,
@@ -127,7 +129,7 @@ def play_trick(
         raise HTTPException(400, detail=str(e)) from e
 
 
-@router.post("/team/create")
+@router.post(Routes.Team.CREATE)
 async def create_team(
     db: DBSession,
     game: Annotated[Game, Depends(get_game)],
@@ -155,7 +157,7 @@ async def create_team(
     return t
 
 
-@router.post("/team/delete")
+@router.post(Routes.Team.DELETE)
 async def delete_team(
     db: DBSession,
     user: Annotated[OAuthUser, Depends(get_current_user)],
@@ -176,7 +178,7 @@ async def delete_team(
     return team
 
 
-@router.post("/team/join")
+@router.post(Routes.Team.JOIN)
 async def join_team(
     db: DBSession,
     game: Annotated[Game, Depends(get_game)],
@@ -195,7 +197,7 @@ async def join_team(
     return tm
 
 
-@router.post("/team/leave")
+@router.post(Routes.Team.LEAVE)
 async def leave_team(
     db: DBSession,
     game: Annotated[Game, Depends(get_game)],

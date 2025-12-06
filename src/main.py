@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import redis
+import redis.asyncio as redis_async
 from fastapi import FastAPI
 from pydantic_settings import BaseSettings
 from sqlalchemy import Engine
@@ -26,27 +27,28 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = Settings()
 
     # relational db
-    connect_args = {"check_same_thread": False}
+    connect_args = {}
     engine: Engine = create_engine(settings.database_url, connect_args=connect_args)
     SQLModel.metadata.create_all(engine)
     app.state.db_engine = engine
 
-    # redis
-    redis_client = redis.from_url(settings.redis_url)  # pyright: ignore[reportUnknownMemberType]
-    gm = GameManager(redis_client, engine)
+    # game management
+    sync_redis = redis.from_url(settings.redis_url)  # pyright: ignore[reportUnknownMemberType]
+    gm = GameManager(sync_redis, engine)
     app.state.gm = gm
 
     # websocket connection management
     cm = ConnectionManager()
     app.state.cm = cm
 
-    # Start Redis subscriber for pub/sub
-    subscriber = RedisSubscriber(settings.redis_url, cm)
+    # redis subscriber for pub/sub
+    async_redis = redis_async.from_url(settings.redis_url)  # pyright: ignore[reportUnknownMemberType]
+    subscriber = RedisSubscriber(async_redis, cm)
     await subscriber.start()
 
     yield
 
-    # Cleanup on shutdown
+    # cleanup on shutdown
     await subscriber.stop()
 
 

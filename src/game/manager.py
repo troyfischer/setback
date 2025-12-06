@@ -509,7 +509,7 @@ class GameManager:
                 channel=channel,
             )
         except Exception as e:
-            self.log.error(
+            self.log.exception(
                 "failed to publish event",
                 error=str(e),
                 event_type=event_type,
