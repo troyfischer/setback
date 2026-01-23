@@ -77,4 +77,5 @@ venv = ".venv"
 [dependency-groups]
 dev = [
     "fakeredis>=2.32.1",
+    "pulumi-aws>=7.13.0",
 ]
