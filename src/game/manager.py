@@ -171,7 +171,7 @@ class Trick(TurnBased[PlayedCard]):
         """
         If a trump card is played in a trick then the best card is the highest
         trump. Otherwise the best card is the highest value card that matches
-        the suit of the first card played of in the trick.
+        the suit of the first card played in the trick.
         """
 
         if not self.collection:
@@ -308,6 +308,9 @@ class GameRound(GameModel):
     def new_round(
         game_id: int, players: int, dealer_idx: ModIdx | None = None
     ) -> GameRound:
+        if players < 2:
+            raise InvalidGameStateException(f"cannot start game with {players} players")
+
         dealer_idx = dealer_idx or ModIdx(
             idx=random.randint(0, players - 1),
             mod=players,
@@ -499,9 +502,7 @@ class GameManager:
             )
 
             channel = RedisChannels.game(game_state.game_id)
-            pub = cast(bool, self.redis.publish(channel, event.model_dump_json()))
-            if not pub:
-                raise Exception("unknown redis error")
+            _ = cast(bool, self.redis.publish(channel, event.model_dump_json()))
             self.log.debug(
                 "published event to redis",
                 event_type=event_type,

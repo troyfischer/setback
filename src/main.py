@@ -20,15 +20,16 @@ from src.game.websocket import ConnectionManager, RedisSubscriber
 class Settings(BaseSettings):
     database_url: str = "sqlite:///database.db"
     redis_url: str = "redis://localhost:6379"
+    session_secret: str = "your-super-secret-key"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = Settings()
+    app.state.settings = settings
 
     # relational db
-    connect_args = {}
-    engine: Engine = create_engine(settings.database_url, connect_args=connect_args)
+    engine: Engine = create_engine(settings.database_url, connect_args={})
     SQLModel.metadata.create_all(engine)
     app.state.db_engine = engine
 
@@ -54,10 +55,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(
     title="Setback",
-    description="A FastAPI app with JWT authentication",
+    description="An application hosting the card game called setback",
     version="0.1.0",
     lifespan=lifespan,
 )
-app.add_middleware(SessionMiddleware, secret_key="your-super-secret-key")
+
+# Session middleware will use settings after lifespan startup
+# For now, use a temporary key that will be replaced
+settings = Settings()
+app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
 app.include_router(src.auth.router.router)
 app.include_router(src.game.router.router)
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for monitoring and testing."""
+    return {"status": "healthy"}

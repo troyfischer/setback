@@ -2,6 +2,7 @@ import json
 import os
 from typing import final, override
 
+from pydantic_settings import BaseSettings
 from starlette.requests import Request
 
 from src.auth.models import Credentials
@@ -9,10 +10,15 @@ from src.auth.sso.base import OAuthProvider, oauth
 from src.auth.sso.models import OAuthUser
 
 
+class OAuthSettings(BaseSettings):
+    base_url: str = "http://localhost:8000"
+
+
 @final
 class GoogleOAuth(OAuthProvider):
     def __init__(self):
         creds = self.load_creds()
+        self.settings = OAuthSettings()
 
         self.client = oauth.register(
             name="google",
@@ -39,7 +45,7 @@ class GoogleOAuth(OAuthProvider):
     @property
     @override
     def redirect_uri(self) -> str:
-        return "http://localhost:8000/auth/google/callback"
+        return f"{self.settings.base_url}/auth/google/callback"
 
     @property
     @override
