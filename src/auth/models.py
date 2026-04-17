@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 from pydantic import BaseModel, ConfigDict
 from sqlmodel import Field, SQLModel
@@ -9,6 +9,9 @@ class Claims(TypedDict):
     sub: str
     exp: datetime | None
     typ: str
+    game_id: NotRequired[int]
+    aud: NotRequired[str]
+    jti: NotRequired[str]
 
 
 class Token(BaseModel):

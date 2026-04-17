@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import enum
-from datetime import datetime, timedelta, timezone
+import secrets
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, cast, final
 
 from fastapi import Depends, HTTPException
@@ -15,6 +16,7 @@ from src.auth.secrets import ALGORITHM, SECRET_KEY
 class TokenType(enum.StrEnum):
     ACCESS = "access"
     REFRESH = "refresh"
+    SSE = "sse"
 
 
 @final
@@ -25,14 +27,24 @@ class JWT:
         self._key = key
         self._algorithm = algorithm
 
-    def _create(self, sub: str, typ: str, minutes_to_expire: int = 15) -> str:
-        claims: Claims = {
+    def _create(
+        self,
+        sub: str,
+        typ: str,
+        *,
+        expires_in: timedelta,
+        extra_claims: dict[str, object] | None = None,
+    ) -> str:
+        claims: dict[str, object] = {
             "sub": sub,
-            "exp": datetime.now(tz=timezone.utc) + timedelta(minutes=minutes_to_expire),
+            "exp": datetime.now(tz=UTC) + expires_in,
             "typ": typ,
         }
+        if extra_claims:
+            claims.update(extra_claims)
+
         encoded_jwt = jwt.encode(
-            claims=dict(claims),
+            claims=claims,
             key=self._key,
             algorithm=self._algorithm,
         )
@@ -49,6 +61,7 @@ class JWT:
                         credentials,
                         self._key,
                         algorithms=[self._algorithm],
+                        options={"verify_aud": False},
                     ),
                 ),
             )
@@ -61,10 +74,36 @@ class JWT:
             raise exc from e
 
     def create_access_token(self, sub: str, minutes_to_expire: int = 15) -> str:
-        return self._create(sub, TokenType.ACCESS, minutes_to_expire)
+        return self._create(
+            sub,
+            TokenType.ACCESS,
+            expires_in=timedelta(minutes=minutes_to_expire),
+        )
 
     def create_refresh_token(self, sub: str, days_to_expire: int = 30) -> str:
-        return self._create(sub, TokenType.REFRESH, days_to_expire * 24 * 60)
+        return self._create(
+            sub,
+            TokenType.REFRESH,
+            expires_in=timedelta(days=days_to_expire),
+        )
+
+    def create_sse_token(
+        self,
+        sub: str,
+        game_id: int,
+        audience: str,
+        seconds_to_expire: int = 60,
+    ) -> str:
+        return self._create(
+            sub,
+            TokenType.SSE,
+            expires_in=timedelta(seconds=seconds_to_expire),
+            extra_claims={
+                "game_id": game_id,
+                "aud": audience,
+                "jti": secrets.token_urlsafe(8),
+            },
+        )
 
     def validate_access_token(
         self, credentials: HTTPAuthorizationCredentials
@@ -73,6 +112,25 @@ class JWT:
 
     def validate_refresh_token(self, token: str) -> Claims:
         return self._validate(token, TokenType.REFRESH)
+
+    def validate_sse_token(
+        self,
+        token: str,
+        *,
+        expected_game_id: int,
+        expected_audience: str,
+    ) -> Claims:
+        claims = self._validate(token, TokenType.SSE)
+        exc = HTTPException(401, "Invalid sse token")
+
+        game_id = claims.get("game_id")
+        audience = claims.get("aud")
+
+        if not isinstance(game_id, int) or game_id != expected_game_id:
+            raise exc
+        if not isinstance(audience, str) or audience != expected_audience:
+            raise exc
+        return claims
 
 
 def get_jwt_manager():

@@ -1,8 +1,9 @@
-from typing import cast
+from typing import Annotated
 
-from fastapi import HTTPException, Request
+from fastapi import Depends, HTTPException
 
 from src.auth.sso.models import OAuthUser
+from src.auth.utils import get_current_user
 from src.db import DBSession
 from src.game.models import (
     Game,
@@ -21,11 +22,10 @@ async def get_game(req: GameRequest, db: DBSession) -> Game:
 
 
 async def get_player_in_game(
-    request: Request,
     req: GameRequest,
     db: DBSession,
+    user: Annotated[OAuthUser, Depends(get_current_user)],
 ) -> Player:
-    user = cast(OAuthUser, request.state.user)
     player = db.get(Player, (user.sub, req.game_id))
     if not player:
         raise HTTPException(404, f"{user.sub} not an active player in game")

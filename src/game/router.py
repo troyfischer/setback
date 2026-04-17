@@ -1,5 +1,6 @@
 import asyncio
 import json
+from collections.abc import AsyncGenerator
 from typing import Annotated, cast
 
 from fastapi import (
@@ -9,9 +10,10 @@ from fastapi import (
     Request,
 )
 from fastapi.responses import StreamingResponse
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from sqlmodel import select
 
+from src.auth.jwt import JwtManager
 from src.auth.sso.models import OAuthUser
 from src.auth.utils import get_current_user
 from src.db import DBSession
@@ -26,17 +28,58 @@ from src.game.models import (
     Team,
     TeamMember,
 )
+from src.game.sse import ConnectionManager
 from src.game.utils import get_game, get_player_in_game, get_team
 from src.logging import new_logger
 from src.request import RequestContext
 
 logger = new_logger(__name__)
 
+SSE_HEARTBEAT_SECONDS = 15.0
+SSE_RETRY_MILLISECONDS = 3000
+SSE_AUDIENCE = "game_subscribe"
+SSE_CONNECT_TOKEN_TTL_SECONDS = 60
 
-router = APIRouter(prefix=Routes.PREFIX, dependencies=[Depends(get_current_user)])
+
+class SubscribeTokenResponse(BaseModel):
+    sse_token: str
+    expires_in_seconds: int
 
 
-@router.post(Routes.Game.CREATE)
+async def sse_event_stream(
+    game_id: int,
+    connection_manager: ConnectionManager,
+    *,
+    heartbeat_seconds: float = SSE_HEARTBEAT_SECONDS,
+) -> AsyncGenerator[str, None]:
+    queue = connection_manager.connect(game_id)
+    try:
+        yield f"retry: {SSE_RETRY_MILLISECONDS}\n\n"
+        while True:
+            try:
+                message = await asyncio.wait_for(
+                    queue.get(),
+                    timeout=heartbeat_seconds,
+                )
+                data = json.dumps(message)
+                yield f"data: {data}\n\n"
+            except TimeoutError:
+                # Keep intermediate proxies and clients from timing out idle streams.
+                yield ": keep-alive\n\n"
+    except asyncio.CancelledError:
+        pass
+    finally:
+        connection_manager.disconnect(game_id, queue)
+
+
+router = APIRouter(prefix=Routes.PREFIX)
+protected_router = APIRouter(
+    prefix=Routes.PREFIX,
+    dependencies=[Depends(get_current_user)],
+)
+
+
+@protected_router.post(Routes.Game.CREATE)
 async def create(request: Request, db: DBSession):
     user = cast(OAuthUser, request.state.user)
 
@@ -48,7 +91,7 @@ async def create(request: Request, db: DBSession):
     return game
 
 
-@router.post(Routes.Game.DELETE)
+@protected_router.post(Routes.Game.DELETE)
 async def delete(
     user: Annotated[OAuthUser, Depends(get_current_user)],
     db: DBSession,
@@ -61,7 +104,7 @@ async def delete(
     return game
 
 
-@router.post(Routes.Game.JOIN)
+@protected_router.post(Routes.Game.JOIN)
 async def join_game(
     req: GameManagementRequest,
     request: Request,
@@ -82,7 +125,7 @@ async def join_game(
     return p
 
 
-@router.post(Routes.Game.START)
+@protected_router.post(Routes.Game.START)
 def start_game(
     ctx: RequestContext,
     db: DBSession,
@@ -100,7 +143,7 @@ def start_game(
     return game_state
 
 
-@router.post(Routes.Game.BID)
+@protected_router.post(Routes.Game.BID)
 def bid_game(
     ctx: RequestContext,
     req: BidRequest,
@@ -115,7 +158,7 @@ def bid_game(
         raise HTTPException(400, detail=str(e)) from e
 
 
-@router.post(Routes.Game.PLAY)
+@protected_router.post(Routes.Game.PLAY)
 def play_trick(
     ctx: RequestContext,
     req: PlayCardRequest,
@@ -130,7 +173,7 @@ def play_trick(
         raise HTTPException(400, detail=str(e)) from e
 
 
-@router.post(Routes.Team.CREATE)
+@protected_router.post(Routes.Team.CREATE)
 async def create_team(
     db: DBSession,
     game: Annotated[Game, Depends(get_game)],
@@ -158,7 +201,7 @@ async def create_team(
     return t
 
 
-@router.post(Routes.Team.DELETE)
+@protected_router.post(Routes.Team.DELETE)
 async def delete_team(
     db: DBSession,
     user: Annotated[OAuthUser, Depends(get_current_user)],
@@ -179,7 +222,7 @@ async def delete_team(
     return team
 
 
-@router.post(Routes.Team.JOIN)
+@protected_router.post(Routes.Team.JOIN)
 async def join_team(
     db: DBSession,
     game: Annotated[Game, Depends(get_game)],
@@ -198,7 +241,7 @@ async def join_team(
     return tm
 
 
-@router.post(Routes.Team.LEAVE)
+@protected_router.post(Routes.Team.LEAVE)
 async def leave_team(
     db: DBSession,
     game: Annotated[Game, Depends(get_game)],
@@ -215,11 +258,40 @@ async def leave_team(
     return member
 
 
-@router.get("/game/{game_id}/subscribe")
+@protected_router.post("/game/{game_id}/subscribe-token")
+async def create_subscribe_token(
+    game_id: int,
+    user: Annotated[OAuthUser, Depends(get_current_user)],
+    db: DBSession,
+    jwt: JwtManager,
+) -> SubscribeTokenResponse:
+    game = db.get(Game, game_id)
+    if not game:
+        raise HTTPException(404, "Game not found")
+
+    player = db.get(Player, (user.sub, game_id))
+    if not player:
+        raise HTTPException(403, "not an active player in game")
+
+    token = jwt.create_sse_token(
+        user.sub,
+        game_id,
+        audience=SSE_AUDIENCE,
+        seconds_to_expire=SSE_CONNECT_TOKEN_TTL_SECONDS,
+    )
+    return SubscribeTokenResponse(
+        sse_token=token,
+        expires_in_seconds=SSE_CONNECT_TOKEN_TTL_SECONDS,
+    )
+
+
+@router.get("/game/{game_id}/subscribe", dependencies=[])
 async def game_subscribe(
     ctx: RequestContext,
     game_id: int,
     db: DBSession,
+    jwt: JwtManager,
+    sse_token: str | None = None,
 ):
     """
     SSE endpoint for clients to subscribe to game updates.
@@ -227,27 +299,31 @@ async def game_subscribe(
     Clients should connect to this endpoint after joining a game to receive
     real-time updates about bids, card plays, and game state changes.
     """
+    if not sse_token:
+        raise HTTPException(401, "missing sse token")
+
+    claims = jwt.validate_sse_token(
+        sse_token,
+        expected_game_id=game_id,
+        expected_audience=SSE_AUDIENCE,
+    )
+
     game = db.get(Game, game_id)
     if not game:
         raise HTTPException(404, "Game not found")
 
-    async def event_stream():
-        queue = ctx.cm.connect(game_id)
-        try:
-            while True:
-                message = await queue.get()
-                data = json.dumps(message)
-                yield f"data: {data}\n\n"
-        except asyncio.CancelledError:
-            pass
-        finally:
-            ctx.cm.disconnect(game_id, queue)
+    player = db.get(Player, (claims["sub"], game_id))
+    if not player:
+        raise HTTPException(403, "not an active player in game")
 
     return StreamingResponse(
-        event_stream(),
+        sse_event_stream(game_id, ctx.cm),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
         },
     )
+
+router.include_router(protected_router)

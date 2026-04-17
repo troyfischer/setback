@@ -1,6 +1,5 @@
 from datetime import datetime
 from typing import Annotated
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.security import OAuth2PasswordRequestForm
@@ -18,9 +17,16 @@ router = APIRouter(prefix="/auth")
 _handlers = {h.provider: h for h in [GoogleOAuth()]}
 
 
+def _get_handler(provider: str) -> GoogleOAuth:
+    handler = _handlers.get(provider)
+    if handler is None:
+        raise HTTPException(404, f"Unknown OAuth provider: {provider}")
+    return handler
+
+
 @router.get("/{provider}/login")
 async def oauth_login(provider: str, request: Request):
-    return await _handlers[provider].login(request)
+    return await _get_handler(provider).login(request)
 
 
 @router.get("/{provider}/callback")
@@ -31,7 +37,7 @@ async def oauth_callback(
     db: DBSession,
     jwt: JwtManager,
 ):
-    sso_user = await _handlers[provider].callback(request)
+    sso_user = await _get_handler(provider).callback(request)
 
     merged = db.merge(sso_user)
     db.commit()
