@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 import redis
 import redis.asyncio as redis_async
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic_settings import BaseSettings
 from sqlalchemy import Engine
@@ -22,6 +23,16 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///database.db"
     redis_url: str = "redis://localhost:6379"
     session_secret: str = "your-super-secret-key"
+    cors_origins: list[str] = [
+        "http://localhost",
+        "http://localhost:3000",
+        "http://localhost:8081",
+        "http://localhost:19006",
+        "http://127.0.0.1",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8081",
+        "http://127.0.0.1:19006",
+    ]
 
 
 @asynccontextmanager
@@ -64,6 +75,13 @@ app = FastAPI(
 # Session middleware will use settings after lifespan startup
 # For now, use a temporary key that will be replaced
 settings = Settings()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_headers=["*"],
+    allow_methods=["*"],
+)
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
 app.include_router(src.auth.router.router)
 app.include_router(src.game.router.router)
