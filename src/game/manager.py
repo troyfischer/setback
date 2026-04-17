@@ -367,7 +367,7 @@ class GameState(GameModel):
         A game moves between the 'bid' phase, which occurs at the start of each
         new round, and the 'play' phase, where users are adding cards to an
         active trick. The 'complete' phase is reached when a given team meets or
-        exceeds the prefinded maximum score.
+        exceeds the predefined maximum score.
         """
         match self.phase:
             case Phase.BID:

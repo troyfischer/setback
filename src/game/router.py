@@ -1,3 +1,5 @@
+import asyncio
+import json
 from typing import Annotated, cast
 
 from fastapi import (
@@ -5,9 +7,8 @@ from fastapi import (
     Depends,
     HTTPException,
     Request,
-    WebSocket,
-    WebSocketDisconnect,
 )
+from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 from sqlmodel import select
 
@@ -214,40 +215,39 @@ async def leave_team(
     return member
 
 
-@router.websocket("/game/{game_id}/subscribe")
+@router.get("/game/{game_id}/subscribe")
 async def game_subscribe(
     ctx: RequestContext,
-    websocket: WebSocket,
     game_id: int,
     db: DBSession,
 ):
     """
-    WebSocket endpoint for clients to subscribe to game updates.
+    SSE endpoint for clients to subscribe to game updates.
 
     Clients should connect to this endpoint after joining a game to receive
     real-time updates about bids, card plays, and game state changes.
     """
-    # Verify the game exists
     game = db.get(Game, game_id)
     if not game:
-        await websocket.close(code=1008, reason="Game not found")
-        return
+        raise HTTPException(404, "Game not found")
 
-    # TODO: Verify the user is a player in this game
-    # For now, we'll allow anyone to subscribe (you can add auth later)
+    async def event_stream():
+        queue = ctx.cm.connect(game_id)
+        try:
+            while True:
+                message = await queue.get()
+                data = json.dumps(message)
+                yield f"data: {data}\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            ctx.cm.disconnect(game_id, queue)
 
-    await ctx.cm.connect(game_id, websocket)
-
-    try:
-        # Keep the connection alive and handle any incoming messages
-        # (though clients shouldn't send messages - they use REST for actions)
-        while True:
-            # Just receive to keep connection alive
-            # Clients shouldn't send data here, but we need to await something
-            _ = await websocket.receive_text()
-    except WebSocketDisconnect:
-        logger.info("client disconnected", game_id=game_id)
-    except Exception as e:
-        logger.error("websocket error", game_id=game_id, error=str(e))
-    finally:
-        ctx.cm.disconnect(game_id, websocket)
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        },
+    )

@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 import redis
 import redis.asyncio as redis_async
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from pydantic_settings import BaseSettings
 from sqlalchemy import Engine
 from sqlmodel import SQLModel, create_engine
@@ -14,7 +15,7 @@ from starlette.middleware.sessions import SessionMiddleware
 import src.auth.router
 import src.game.router
 from src.game.manager import GameManager
-from src.game.websocket import ConnectionManager, RedisSubscriber
+from src.game.sse import ConnectionManager, RedisSubscriber
 
 
 class Settings(BaseSettings):

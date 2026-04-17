@@ -5,7 +5,7 @@ from fastapi.datastructures import State
 from sqlalchemy import Engine
 
 from src.game.manager import GameManager
-from src.game.websocket import ConnectionManager
+from src.game.sse import ConnectionManager
 
 
 @final
