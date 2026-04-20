@@ -7,7 +7,6 @@ import redis
 import redis.asyncio as redis_async
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from pydantic_settings import BaseSettings
 from sqlalchemy import Engine
 from sqlmodel import SQLModel, create_engine
@@ -91,3 +90,4 @@ app.include_router(src.game.router.router)
 async def health_check():
     """Health check endpoint for monitoring and testing."""
     return {"status": "healthy"}
+
