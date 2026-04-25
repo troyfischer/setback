@@ -1,0 +1,4 @@
+config:
+  digitalocean:token:
+    secure: REPLACE_WITH_YOUR_DO_TOKEN
+  setback-deployment:domain: setback.troyfischer.net

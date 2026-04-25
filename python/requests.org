@@ -1,0 +1,195 @@
+#+title: Requests
+#+PROPERTY: host localhost:80
+
+* Token
+:PROPERTIES:
+:header-args:http: :pretty yes :wrap example json :host (org-entry-get nil "host" t)
+:END:
+
+Dev only token access
+
+#+name: token-local
+#+begin_src http :select .access_token
+POST /auth/token
+Content-Type: application/x-www-form-urlencoded
+
+username=user1&password=secret
+#+end_src
+
+#+name: token
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMDUzODQxNjE1NDA0NDg4MDcyMTEiLCJleHAiOjE3NjkxMzYyNDAsInR5cCI6ImFjY2VzcyJ9.V5Q3kSNOQbOucsKEdysdiQFiSl3qgDln1gKzIScZMNU
+
+* OAuth SSO
+:PROPERTIES:
+:header-args:http: :pretty yes :wrap example json :host (org-entry-get nil "host" t)
+:END:
+** Google
+
+#+name: redirect-url
+#+begin_src sh :var host=(org-entry-get nil "host" t)
+curl -o /dev/null -w %{url_effective} -Ls http://$host/auth/google/login
+#+end_src
+
+*** Redirect
+:PROPERTIES:
+:header-args:http: :wrap example json
+:END:
+#+begin_src http :var redirect=redirect-url
+GET ${redirect}
+#+end_src
+
+
+
+* Routes
+:PROPERTIES:
+:header-args:http: :pretty yes :wrap example json :host (org-entry-get nil "host" t) :var token=token
+:END:
+
+** Health
+
+#+begin_src http
+GET /health
+Authorization: Bearer ${token}
+#+end_src
+
+** Games
+*** Create
+#+begin_src http
+POST /game/create
+Authorization: Bearer ${token}
+#+end_src
+
+*** Delete
+#+begin_src http
+POST /game/delete
+Content-Type: application/json
+Authorization: Bearer ${token}
+
+{
+  "game_id": 4
+}
+#+end_src
+
+*** Join
+#+begin_src http
+POST /game/join
+Content-Type: application/json
+Authorization: Bearer ${token}
+
+{
+  "game_id": 1,
+  "secret": "NnPZes3n_DI"
+}
+#+end_src
+
+#+RESULTS:
+#+begin_example json
+{
+  "game_id": 1,
+  "id": "105384161540448807211"
+}
+#+end_example
+
+*** Start
+#+begin_src http
+POST /game/start
+Content-Type: application/json
+Authorization: Bearer ${token}
+
+{
+  "game_id": 1,
+  "secret": "NnPZes3n_DI"
+}
+#+end_src
+
+#+RESULTS:
+#+begin_example json
+Internal Server Error
+#+end_example
+
+** Teams
+*** Create
+#+begin_src http
+POST /team/create
+Content-Type: application/json
+Authorization: Bearer ${token}
+
+{
+  "game_id": 1,
+  "player": "otheruser"
+}
+#+end_src
+
+*** Delete
+#+begin_src http
+POST /team/delete
+Content-Type: application/json
+Authorization: Bearer ${token}
+
+{
+  "game_id": 1,
+  "player": "testuser"
+}
+#+end_src
+
+#+RESULTS:
+#+begin_example json
+{
+  "id": 1,
+  "game_id": 1,
+  "owner": "testuser"
+}
+#+end_example
+
+*** Join
+#+begin_src http
+POST /team/join
+Content-Type: application/json
+Authorization: Bearer ${token}
+
+{
+  "game_id": 1,
+  "team_id": 1,
+  "player": "otheruser"
+}
+#+end_src
+
+*** Leave
+#+begin_src http
+POST /team/leave
+Content-Type: application/json
+Authorization: Bearer ${token}
+
+{
+  "game_id": 1,
+  "team_id": 1,
+  "player": "otheruser"
+}
+#+end_src
+
+#+begin_src http
+GET /auth/logout
+Authorization: Bearer ${token}
+#+end_src
+
+#+begin_src http :curl -b refresh_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMDUzODQxNjE1NDA0NDg4MDcyMTEiLCJleHAiOjE3NTk0NjI5NDgsInR5cCI6ImFjY2VzcyJ9.CbJhK6Zy6GkInL_ZaRNZfCIqanHWWWeimjfdbj8dQ_c
+GET /auth/refresh
+#+end_src
+** Oauth2
+#+begin_src http
+GET /auth/logout
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMDUzODQxNjE1NDA0NDg4MDcyMTEiLCJleHAiOjE3NTk0NjI5NDgsInR5cCI6ImFjY2VzcyJ9.CbJhK6Zy6GkInL_ZaRNZfCIqanHWWWeimjfdbj8dQ_c
+#+end_src
+* Pulumi Example
+#+begin_src http
+GET 3.82.21.84:8000/
+#+end_src
+
+#+RESULTS:
+: HTTP/1.1 200 OK
+: date: Thu, 11 Dec 2025 14:53:31 GMT
+: server: uvicorn
+: content-length: 35
+: content-type: application/json
+:
+: {"Hello":"From Ubuntu and Pulumi!"}

@@ -1,0 +1,13 @@
+# Local development configuration without HTTPS
+{
+    auto_https off
+}
+
+:80 {
+    reverse_proxy web:80
+
+    log {
+        output stdout
+        format console
+    }
+}

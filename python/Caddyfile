@@ -1,0 +1,10 @@
+# Production configuration with automatic HTTPS
+setback.troyfischer.net {
+    reverse_proxy web:80
+
+    # Enable logging
+    log {
+        output stdout
+        format console
+    }
+}
