@@ -1,0 +1,12 @@
+.DS_Store
+.idea
+*.log
+tmp/
+.agent-shell
+.env*
+python/resources/secrets
+
+*.py[cod]
+*.egg
+build
+htmlcov
