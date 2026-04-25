@@ -1,0 +1,134 @@
+export type Suit = 'club' | 'diamond' | 'heart' | 'spade';
+export type Phase = 'bid' | 'complete' | 'play';
+
+export type TokenResponse = {
+  access_token: string;
+  token_type: string;
+};
+
+export type GameRecord = {
+  created_at: string;
+  id: number;
+  join_code: string;
+  owner: string;
+  started: boolean;
+};
+
+export type PlayerRecord = {
+  game_id: number;
+  id: string;
+};
+
+export type TeamRecord = {
+  game_id: number;
+  id: number;
+  owner: string;
+};
+
+export type TeamMemberRecord = {
+  game_id: number;
+  player_id: string;
+  team_id: number;
+};
+
+export type SubscribeTokenResponse = {
+  expires_in_seconds: number;
+  sse_token: string;
+};
+
+export type ModIndex = {
+  idx: number;
+  mod: number;
+};
+
+export type SetbackCard = {
+  null: boolean;
+  suit: Suit;
+  value: number;
+};
+
+export type PlayedCard = SetbackCard & {
+  player_id: string;
+};
+
+export type BidAction = {
+  amount: 0 | 2 | 3 | 4;
+  player_id: string;
+};
+
+export type TurnCollection<T> = {
+  collection: T[];
+  game_id: number;
+  turn: ModIndex;
+};
+
+export type RoundScore = {
+  game: [number, number];
+  high: [number, PlayedCard];
+  jack: [number, PlayedCard] | null;
+  low: [number, PlayedCard];
+};
+
+export type GameRound = {
+  bid: TurnCollection<BidAction>;
+  dealer: ModIndex;
+  game_id: number;
+  hands: SetbackCard[][];
+  score: RoundScore | null;
+  trick: TurnCollection<PlayedCard> | null;
+  tricks_won: Record<string, TurnCollection<PlayedCard>[]>;
+  trump: Suit | null;
+};
+
+export type GamePlayer = {
+  player_id: string;
+  team_id: number;
+  turn: number;
+};
+
+export type PlayerOrder = {
+  order: GamePlayer[];
+};
+
+export type GameState = {
+  active_round: GameRound;
+  game_id: number;
+  max_score: number;
+  order: PlayerOrder;
+  phase: Phase;
+  rounds: GameRound[];
+  score: Record<string, number>;
+};
+
+export type GameEvent = {
+  data: GameState;
+  event_type:
+    | 'bid_placed'
+    | 'card_played'
+    | 'game_complete'
+    | 'game_started'
+    | 'round_complete'
+    | 'state_update'
+    | 'trick_won';
+  game_id: number;
+};
+
+export type GameRequest = {
+  game_id: number;
+};
+
+export type GameManagementRequest = GameRequest & {
+  secret: string;
+};
+
+export type UpdateTeamRequest = GameRequest & {
+  team_id: number;
+};
+
+export type BidRequest = GameRequest & {
+  amount: 0 | 2 | 3 | 4;
+};
+
+export type PlayCardRequest = GameRequest & {
+  card: SetbackCard;
+};
