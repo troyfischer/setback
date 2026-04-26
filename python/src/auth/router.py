@@ -1,7 +1,9 @@
+import json
 from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from starlette.requests import Request
 
@@ -11,6 +13,7 @@ from src.auth.sso import GoogleOAuth
 from src.auth.sso.models import OAuthUser
 from src.auth.utils import get_current_user
 from src.db import DBSession
+from src.request import RequestContext
 
 router = APIRouter(prefix="/auth")
 
@@ -29,8 +32,37 @@ async def oauth_login(provider: str, request: Request):
     return await _get_handler(provider).login(request)
 
 
+# TODO: move this elsewhere
+# return html snippet instead of raw json
+
+
+class HTMLTemplate:
+    html_template = """
+<html>
+    <script>
+    const payload = {{ access_token: {} }};
+    const targetOrigin = {};
+    if (window.opener) {{
+        window.opener.postMessage(payload, targetOrigin);
+    }}
+    window.close();
+    </script>
+    <p>You can close this window.</p>
+</html>"""
+
+    def __init__(self, access_token: str, client_origin: str):
+        self._access_token = access_token
+        self._client_origin = client_origin
+
+    def __str__(self):
+        return self.html_template.format(
+            *(map(json.dumps, (self._access_token, self._client_origin)))
+        )
+
+
 @router.get("/{provider}/callback")
 async def oauth_callback(
+    ctx: RequestContext,
     provider: str,
     request: Request,
     response: Response,
@@ -38,6 +70,7 @@ async def oauth_callback(
     jwt: JwtManager,
 ):
     sso_user = await _get_handler(provider).callback(request)
+    settings = ctx.settings
 
     merged = db.merge(sso_user)
     db.commit()
@@ -54,7 +87,13 @@ async def oauth_callback(
         secure=True,  # HTTPS only (set False for localhost dev)
         samesite="lax",  # CSRF protection
     )
-    return Token(access_token=access_token)
+    return HTMLResponse(
+        content=str(HTMLTemplate(access_token, settings.client_origin)),
+        headers={
+            "Cache-Control": "no-store",
+            "X-Frame-Options": "DENY",
+        },
+    )
 
 
 @router.get("/refresh")
@@ -81,6 +120,11 @@ async def logout(user: Annotated[OAuthUser, Depends(get_current_user)], db: DBSe
     db.commit()
 
     return user.name + " logged out"
+
+
+@router.get("/me")
+async def me(user: Annotated[OAuthUser, Depends(get_current_user)]) -> OAuthUser:
+    return user
 
 
 @router.post("/token")

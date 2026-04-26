@@ -28,6 +28,8 @@ from src.game.models import (
     Team,
     TeamMember,
 )
+from src.game.manager import GameStatePlayerScoped
+from src.game.scope import scope_state_for_player
 from src.game.sse import ConnectionManager
 from src.game.utils import get_game, get_player_in_game, get_team
 from src.logging import new_logger
@@ -48,11 +50,12 @@ class SubscribeTokenResponse(BaseModel):
 
 async def sse_event_stream(
     game_id: int,
+    player_id: str,
     connection_manager: ConnectionManager,
     *,
     heartbeat_seconds: float = SSE_HEARTBEAT_SECONDS,
 ) -> AsyncGenerator[str, None]:
-    queue = connection_manager.connect(game_id)
+    queue = connection_manager.connect(game_id, player_id)
     try:
         yield f"retry: {SSE_RETRY_MILLISECONDS}\n\n"
         while True:
@@ -69,7 +72,7 @@ async def sse_event_stream(
     except asyncio.CancelledError:
         pass
     finally:
-        connection_manager.disconnect(game_id, queue)
+        connection_manager.disconnect(game_id, player_id, queue)
 
 
 router = APIRouter(prefix=Routes.PREFIX)
@@ -130,7 +133,8 @@ def start_game(
     ctx: RequestContext,
     db: DBSession,
     game: Annotated[Game, Depends(get_game)],
-):
+    user: Annotated[OAuthUser, Depends(get_current_user)],
+) -> GameStatePlayerScoped:
     # TODO:
     # 1. ensure at least X teams
     # 2. ensure no empty teams
@@ -140,7 +144,7 @@ def start_game(
 
     game.started = True
     game = db.merge(game)
-    return game_state
+    return scope_state_for_player(game_state, user.sub)
 
 
 @protected_router.post(Routes.Game.BID)
@@ -149,13 +153,14 @@ def bid_game(
     req: BidRequest,
     game: Annotated[Game, Depends(get_game)],
     player: Annotated[Player, Depends(get_player_in_game)],
-):
+) -> GameStatePlayerScoped:
     try:
-        return ctx.gm.bid_game(game, player, req)
+        state = ctx.gm.bid_game(game, player, req)
     except InvalidGameStateException as e:
         raise HTTPException(400, detail=str(e)) from e
     except ValidationError as e:
         raise HTTPException(400, detail=str(e)) from e
+    return scope_state_for_player(state, player.id)
 
 
 @protected_router.post(Routes.Game.PLAY)
@@ -164,13 +169,14 @@ def play_trick(
     req: PlayCardRequest,
     game: Annotated[Game, Depends(get_game)],
     player: Annotated[Player, Depends(get_player_in_game)],
-):
+) -> GameStatePlayerScoped:
     try:
-        return ctx.gm.play_card(game, player, req.card)
+        state = ctx.gm.play_card(game, player, req.card)
     except InvalidGameStateException as e:
         raise HTTPException(400, detail=str(e)) from e
     except ValidationError as e:
         raise HTTPException(400, detail=str(e)) from e
+    return scope_state_for_player(state, player.id)
 
 
 @protected_router.post(Routes.Team.CREATE)
@@ -317,7 +323,7 @@ async def game_subscribe(
         raise HTTPException(403, "not an active player in game")
 
     return StreamingResponse(
-        sse_event_stream(game_id, ctx.cm),
+        sse_event_stream(game_id, claims["sub"], ctx.cm),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -325,5 +331,31 @@ async def game_subscribe(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@protected_router.get("/game/{game_id}/state")
+def get_game_state(
+    ctx: RequestContext,
+    game_id: int,
+    user: Annotated[OAuthUser, Depends(get_current_user)],
+    db: DBSession,
+) -> GameStatePlayerScoped:
+    """
+    Return the game state scoped to the requesting player's view.
+
+    Useful for reconnecting clients and for driving per-player bots/tests
+    without having to catch every mutation response.
+    """
+    game = db.get(Game, game_id)
+    if not game:
+        raise HTTPException(404, "game not found")
+
+    try:
+        state = ctx.gm.get_state(game)
+    except InvalidGameStateException as e:
+        raise HTTPException(400, detail=str(e)) from e
+
+    return scope_state_for_player(state, user.sub)
+
 
 router.include_router(protected_router)

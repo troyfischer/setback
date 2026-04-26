@@ -4,6 +4,7 @@ from fastapi import Depends, Request
 from fastapi.datastructures import State
 from sqlalchemy import Engine
 
+from src.config import Settings
 from src.game.manager import GameManager
 from src.game.sse import ConnectionManager
 
@@ -20,6 +21,10 @@ class Context:
     @property
     def state(self) -> State:
         return cast(State, self._request.app.state)  # pyright: ignore[reportAny]
+
+    @property
+    def settings(self) -> Settings:
+        return cast(Settings, self.state.settings)
 
     @property
     def gm(self) -> GameManager:

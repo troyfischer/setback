@@ -9,7 +9,7 @@ import httpx
 import pytest
 from testcontainers.compose import DockerCompose
 
-from src.game.manager import GameState
+from src.game.manager import GameStatePlayerScoped
 from src.game.models import Game, Team
 from src.logging import new_logger
 from tests.helpers import (
@@ -154,31 +154,35 @@ def started_game(
     authenticated_users: dict[str, str],
     game: Game,
     teams: list[Team],
-) -> GameState:
+) -> GameStatePlayerScoped:
     game_state = start_game(client, authenticated_users[USERS[0]], game.id)
     log.info(f"✓ game started - phase: {game_state.phase}")
     return game_state
 
 
-def test_start_game(started_game: GameState):
+def test_start_game(started_game: GameStatePlayerScoped):
     assert started_game.active_round is not None
 
 
 @pytest.fixture(scope="module")
 def game_after_bid(
-    client: httpx.Client, authenticated_users: dict[str, str], started_game: GameState
-) -> GameState:
+    client: httpx.Client,
+    authenticated_users: dict[str, str],
+    started_game: GameStatePlayerScoped,
+) -> GameStatePlayerScoped:
     game_state = do_bidding(client, authenticated_users, started_game)
     log.info(f"✓ bidding complete - winner: turn {game_state.active_round.bid.turn}")
     return game_state
 
 
-def test_bidding(game_after_bid: GameState):
+def test_bidding(game_after_bid: GameStatePlayerScoped):
     assert game_after_bid.active_round.bid.highest_bid.amount >= 2
 
 
 def test_play_single_trick(
-    client: httpx.Client, authenticated_users: dict[str, str], game_after_bid: GameState
+    client: httpx.Client,
+    authenticated_users: dict[str, str],
+    game_after_bid: GameStatePlayerScoped,
 ):
     play_trick(client, authenticated_users, game_after_bid)
     log.info("✓ completed one trick")

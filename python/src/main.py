@@ -7,31 +7,15 @@ import redis
 import redis.asyncio as redis_async
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic_settings import BaseSettings
 from sqlalchemy import Engine
 from sqlmodel import SQLModel, create_engine
 from starlette.middleware.sessions import SessionMiddleware
 
 import src.auth.router
 import src.game.router
+from src.config import Settings
 from src.game.manager import GameManager
 from src.game.sse import ConnectionManager, RedisSubscriber
-
-
-class Settings(BaseSettings):
-    database_url: str = "sqlite:///database.db"
-    redis_url: str = "redis://localhost:6379"
-    session_secret: str = "your-super-secret-key"
-    cors_origins: list[str] = [
-        "http://localhost",
-        "http://localhost:3000",
-        "http://localhost:8081",
-        "http://localhost:19006",
-        "http://127.0.0.1",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:8081",
-        "http://127.0.0.1:19006",
-    ]
 
 
 @asynccontextmanager
@@ -90,4 +74,3 @@ app.include_router(src.game.router.router)
 async def health_check():
     """Health check endpoint for monitoring and testing."""
     return {"status": "healthy"}
-

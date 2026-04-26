@@ -9,6 +9,7 @@ from typing import Literal, override
 
 from pydantic import BaseModel
 from pydantic import Field as PydField
+from sqlalchemy import UniqueConstraint
 from sqlmodel import Field as SqlField
 from sqlmodel import ForeignKeyConstraint, SQLModel
 
@@ -33,20 +34,31 @@ class Player(SQLModel, table=True):
 class Team(SQLModel, table=True):
     id: int = SqlField(default=None, primary_key=True)
     game_id: int = SqlField(foreign_key="game.id")
+    team_number: int
     owner: str = SqlField(foreign_key="oauthuser.sub")
+
+    __table_args__ = (
+        UniqueConstraint("game_id", "team_number"),
+        UniqueConstraint("game_id", "id"),
+    )
 
 
 class TeamMember(SQLModel, table=True):
     # one row per (game, player) -> belongs to exactly one team in that game
     game_id: int = SqlField(primary_key=True)
-    team_id: int = SqlField(foreign_key="team.id", primary_key=True)
+    team_id: int = SqlField(primary_key=True)
     player_id: str = SqlField(primary_key=True)
 
-    # enforce the player exists (composite FK to Player)
     __table_args__ = (
+        # enforce the player exists (composite FK to Player)
         ForeignKeyConstraint(
             ["game_id", "player_id"],
             ["player.game_id", "player.id"],
+        ),
+        # enforce the team exists inside the same game
+        ForeignKeyConstraint(
+            ["game_id", "team_id"],
+            ["team.game_id", "team.id"],
         ),
     )
 
@@ -71,7 +83,13 @@ class PlayCardRequest(GameRequest):
 
 
 class UpdateTeamRequest(GameRequest):
-    team_id: int
+    team_number: int
+
+
+class TeamMembership(BaseModel):
+    game_id: int
+    player_id: str
+    team_number: int
 
 
 # Card Models

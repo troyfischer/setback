@@ -6,6 +6,17 @@ export type TokenResponse = {
   token_type: string;
 };
 
+export type CurrentUser = {
+  email: string;
+  email_verified: boolean;
+  family_name: string;
+  given_name: string;
+  logged_in: boolean;
+  name: string;
+  picture: string;
+  sub: string;
+};
+
 export type GameRecord = {
   created_at: string;
   id: number;
@@ -69,11 +80,12 @@ export type RoundScore = {
   low: [number, PlayedCard];
 };
 
-export type GameRound = {
+export type GameRoundPlayerScoped = {
   bid: TurnCollection<BidAction>;
   dealer: ModIndex;
   game_id: number;
-  hands: SetbackCard[][];
+  my_hand: SetbackCard[];
+  player_id: string;
   score: RoundScore | null;
   trick: TurnCollection<PlayedCard> | null;
   tricks_won: Record<string, TurnCollection<PlayedCard>[]>;
@@ -90,18 +102,18 @@ export type PlayerOrder = {
   order: GamePlayer[];
 };
 
-export type GameState = {
-  active_round: GameRound;
+export type GameStatePlayerScoped = {
+  active_round: GameRoundPlayerScoped;
   game_id: number;
   max_score: number;
   order: PlayerOrder;
   phase: Phase;
-  rounds: GameRound[];
+  rounds: GameRoundPlayerScoped[];
   score: Record<string, number>;
 };
 
 export type GameEvent = {
-  data: GameState;
+  data: GameStatePlayerScoped | Record<string, unknown>;
   event_type:
     | 'bid_placed'
     | 'card_played'

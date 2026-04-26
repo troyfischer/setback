@@ -4,7 +4,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "443:443/udp"  # HTTP/3 support
+      - "443:443/udp" # HTTP/3 support
     volumes:
       - ${CADDYFILE:-./Caddyfile}:/etc/caddy/Caddyfile
       - caddy_data:/data
@@ -20,8 +20,9 @@ services:
     environment:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       DATABASE_URL: ${DATABASE_URL:-postgresql://app:secret@postgres:5432/appdb}
-      BASE_URL: ${BASE_URL:-http://localhost:8000}
+      BASE_URL: ${BASE_URL:-http://localhost}
       SESSION_SECRET: ${SESSION_SECRET:-your-super-secret-key-change-me}
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN:-http://localhost:8081}
     depends_on:
       redis:
         condition: service_healthy

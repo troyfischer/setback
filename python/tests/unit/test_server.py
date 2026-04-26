@@ -10,8 +10,9 @@ from fakeredis.aioredis import FakeRedis as AsyncFakeRedis
 from fastapi.testclient import TestClient
 
 from src.game import router as game_router
-from src.game.manager import GameState
+from src.game.manager import GameStatePlayerScoped
 from src.game.models import Game, Team
+from src.game.events import GameEvent
 from src.game.sse import ConnectionManager
 from src.main import app
 from tests.helpers import (
@@ -93,23 +94,27 @@ def started_game(
     authenticated_users: dict[str, str],
     game: Game,
     teams: list[Team],
-) -> GameState:
+) -> GameStatePlayerScoped:
     return start_game(client, authenticated_users[USERS[0]], game.id)
 
 
 @pytest.fixture
 def game_after_bid(
-    client: TestClient, authenticated_users: dict[str, str], started_game: GameState
-) -> GameState:
+    client: TestClient,
+    authenticated_users: dict[str, str],
+    started_game: GameStatePlayerScoped,
+) -> GameStatePlayerScoped:
     return do_bidding(client, authenticated_users, started_game)
 
 
-def test_bid_game(game_after_bid: GameState):
+def test_bid_game(game_after_bid: GameStatePlayerScoped):
     print(game_after_bid)
 
 
 def test_play_single_trick(
-    client: TestClient, authenticated_users: dict[str, str], game_after_bid: GameState
+    client: TestClient,
+    authenticated_users: dict[str, str],
+    game_after_bid: GameStatePlayerScoped,
 ):
     game_state = game_after_bid
     print(game_state.order)
@@ -121,7 +126,9 @@ def test_play_single_trick(
 
 
 def test_play_single_round(
-    client: TestClient, authenticated_users: dict[str, str], game_after_bid: GameState
+    client: TestClient,
+    authenticated_users: dict[str, str],
+    game_after_bid: GameStatePlayerScoped,
 ):
     game_state, tricks_played = play_full_game(
         client, authenticated_users, game_after_bid
@@ -210,14 +217,14 @@ def test_subscribe_rejects_token_for_different_game(
 def test_sse_event_stream_emits_keepalive_then_data():
     async def consume() -> tuple[str, str]:
         cm = ConnectionManager(max_queue_size=2)
-        stream = game_router.sse_event_stream(42, cm, heartbeat_seconds=0.01)
+        stream = game_router.sse_event_stream(42, "player-a", cm, heartbeat_seconds=0.01)
 
         retry_line = await anext(stream)
         keepalive_line = await anext(stream)
 
         await cm.broadcast_to_game(
             42,
-            {"event_type": "bid_placed", "game_id": 42, "data": {"ok": True}},
+            GameEvent(event_type="bid_placed", game_id=42, data={"ok": True}),
         )
         data_line = await anext(stream)
 
@@ -234,20 +241,21 @@ def test_sse_event_stream_emits_keepalive_then_data():
 def test_sse_connection_manager_drops_oldest_message_when_queue_is_full():
     async def consume() -> dict[str, object]:
         cm = ConnectionManager(max_queue_size=1)
-        queue = cm.connect(100)
+        queue = cm.connect(100, "player-a")
 
         await cm.broadcast_to_game(
             100,
-            {"event_type": "first", "game_id": 100, "data": {}},
+            GameEvent(event_type="bid_placed", game_id=100, data={"tag": "first"}),
         )
         await cm.broadcast_to_game(
             100,
-            {"event_type": "second", "game_id": 100, "data": {}},
+            GameEvent(event_type="card_played", game_id=100, data={"tag": "second"}),
         )
 
         message = await queue.get()
-        cm.disconnect(100, queue)
+        cm.disconnect(100, "player-a", queue)
         return message
 
     msg = asyncio.run(consume())
-    assert msg["event_type"] == "second"
+    assert msg["event_type"] == "card_played"
+    assert msg["data"]["tag"] == "second"

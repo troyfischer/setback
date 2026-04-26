@@ -5,83 +5,146 @@ SSE connection management and Redis pub/sub integration.
 from __future__ import annotations
 
 import asyncio
-from typing import Any, TypedDict, final
+from collections.abc import ItemsView
+from typing import Any, TypeAlias, TypedDict, final
 
 import redis.asyncio as redis
 
+from src.game.manager import GameState
 from src.game.events import GameEvent
-from src.game.types import GameId
+from src.game.types import GameId, PlayerId
 from src.logging import new_logger
 
 logger = new_logger(__name__)
+
+
+ClientQueue: TypeAlias = asyncio.Queue[dict[str, Any]]
+
+
+class GameSubscribers:
+    """
+    Active SSE queues for a single game, grouped by `player_id`.
+
+    A single player may hold multiple queues (e.g. multiple tabs). Grouping by
+    player_id is what lets `ConnectionManager.broadcast_to_game` send each
+    player a state scoped to their own hand instead of the full table.
+    """
+
+    def __init__(self) -> None:
+        self._by_player: dict[PlayerId, set[ClientQueue]] = {}
+
+    def add(self, player_id: PlayerId, queue: ClientQueue) -> None:
+        self._by_player.setdefault(player_id, set()).add(queue)
+
+    def remove(self, player_id: PlayerId, queue: ClientQueue) -> None:
+        queues = self._by_player.get(player_id)
+        if not queues:
+            return
+        queues.discard(queue)
+        if not queues:
+            del self._by_player[player_id]
+
+    def is_empty(self) -> bool:
+        return not self._by_player
+
+    @property
+    def connection_count(self) -> int:
+        return sum(len(queues) for queues in self._by_player.values())
+
+    def items(self) -> ItemsView[PlayerId, set[ClientQueue]]:
+        return self._by_player.items()
 
 
 class ConnectionManager:
     """
     Manages SSE connections per server instance.
 
-    Each server maintains its own set of active connections in memory.
-    Clients are represented by asyncio.Queue instances that the SSE
-    streaming response reads from.
+    Each server maintains its own set of active connections in memory, grouped
+    by game and then by player so broadcasts can apply per-player scoping.
     """
 
     def __init__(self, max_queue_size: int = 64):
-        # game_id -> set of asyncio.Queue instances (one per client)
-        self.active_connections: dict[GameId, set[asyncio.Queue[dict[str, Any]]]] = {}
+        self._games: dict[GameId, GameSubscribers] = {}
         self.max_queue_size = max_queue_size
 
-    def connect(self, game_id: GameId) -> asyncio.Queue[dict[str, Any]]:
+    def connect(self, game_id: GameId, player_id: PlayerId) -> ClientQueue:
         """Register a new SSE client and return its message queue."""
-        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(
-            maxsize=self.max_queue_size
-        )
-        if game_id not in self.active_connections:
-            self.active_connections[game_id] = set()
-        self.active_connections[game_id].add(queue)
+        queue: ClientQueue = asyncio.Queue(maxsize=self.max_queue_size)
+        subs = self._games.setdefault(game_id, GameSubscribers())
+        subs.add(player_id, queue)
         logger.info(
             "client connected",
             game_id=game_id,
-            connections=len(self.active_connections[game_id]),
+            player_id=player_id,
+            connections=subs.connection_count,
         )
         return queue
 
-    def disconnect(self, game_id: GameId, queue: asyncio.Queue[dict[str, Any]]) -> None:
+    def disconnect(
+        self, game_id: GameId, player_id: PlayerId, queue: ClientQueue
+    ) -> None:
         """Remove an SSE client's queue."""
-        if game_id in self.active_connections:
-            self.active_connections[game_id].discard(queue)
-            if not self.active_connections[game_id]:
-                del self.active_connections[game_id]
+        subs = self._games.get(game_id)
+        if not subs:
+            return
+
+        subs.remove(player_id, queue)
+        remaining = subs.connection_count
+        if subs.is_empty():
+            del self._games[game_id]
+
         logger.info(
             "client disconnected",
             game_id=game_id,
-            connections=len(self.active_connections.get(game_id, [])),
+            player_id=player_id,
+            connections=remaining,
         )
 
-    async def broadcast_to_game(self, game_id: GameId, message: dict[str, Any]) -> None:
+    async def broadcast_to_game(self, game_id: GameId, event: GameEvent) -> None:
         """
-        Broadcast a message to all clients connected to a specific game
-        on this server instance by putting it on each client's queue.
+        Broadcast an event to every client of a game, scoped per player.
+
+        The full `GameState` on the event is re-serialized once per connected
+        player so each subscriber only sees their own hand.
         """
-        if game_id not in self.active_connections:
+        subs = self._games.get(game_id)
+        if not subs:
             logger.debug(
                 "no active sse connections for game id",
                 game_id=game_id,
             )
             return
 
-        for queue in list(self.active_connections[game_id]):
+        for player_id, queues in subs.items():
+            payload_data: dict[str, Any] = event.data
             try:
-                queue.put_nowait(message)
-            except asyncio.QueueFull:
-                # Drop the oldest event for slow consumers, then enqueue the latest.
-                _ = queue.get_nowait()
-                queue.put_nowait(message)
-            except Exception as e:
-                logger.error(
-                    "error broadcasting to client",
-                    game_id=game_id,
-                    error=str(e),
+                payload_data = (
+                    GameState.model_validate(event.data)
+                    .to_player_scoped(player_id)
+                    .model_dump()
                 )
+            except Exception:
+                payload_data = event.data
+
+            payload = {
+                "event_type": event.event_type,
+                "game_id": event.game_id,
+                "data": payload_data,
+            }
+            for queue in list(queues):
+                try:
+                    queue.put_nowait(payload)
+                except asyncio.QueueFull:
+                    # Drop the oldest event for slow consumers, then enqueue the latest.
+                    _ = queue.get_nowait()
+                    queue.put_nowait(payload)
+                except Exception as e:
+                    logger.error(
+                        "error broadcasting to client",
+                        game_id=game_id,
+                        player_id=player_id,
+                        error=str(e),
+                    )
 
 
 class WSMessage(TypedDict):
@@ -169,8 +232,8 @@ class RedisSubscriber:
                 event_type=event.event_type,
             )
 
-            # Broadcast to all local SSE connections for this game
-            await self.connection_manager.broadcast_to_game(game_id, event.model_dump())
+            # Scoping to each player's view happens inside broadcast_to_game.
+            await self.connection_manager.broadcast_to_game(game_id, event)
 
         except Exception as e:
             logger.error("error handling redis message", error=str(e), message=message)

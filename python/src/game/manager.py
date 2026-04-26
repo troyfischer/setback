@@ -202,22 +202,15 @@ class BidRound(TurnBased[Bid]):
         return max(self.collection, key=lambda b: b.amount)
 
 
-class GameRound(GameModel):
+class _GameRound(GameModel):
     trump: Suit | None
     bid: BidRound
     trick: Trick | None
-    hands: list[list[SetbackCard]] = Field(
-        description="hand of each player, list order matches player order"
-    )
     dealer: ModIdx = Field(description="index into order to indicate current dealer")
     tricks_won: dict[TeamId, list[Trick]] = Field(
         default_factory=dict, description="tricks won by a team"
     )
     score: RoundScore | None = None
-
-    @property
-    def player_count(self) -> int:
-        return len(self.hands)
 
     @property
     def active_trump(self) -> Suit:
@@ -232,12 +225,48 @@ class GameRound(GameModel):
         return self.trick
 
     @property
+    def best_card_of_trick(self) -> PlayedCard:
+        return self.active_trick.best_card(self.active_trump)
+
+
+class GameRoundPlayerScoped(_GameRound):
+    """
+    Only the information necessary for a given player.
+    """
+
+    player_id: PlayerId
+    my_hand: list[SetbackCard] = Field(
+        default_factory=list,
+        description="requesting player's hand",
+    )
+
+
+class GameRound(_GameRound):
+    """
+    Full game state required by the server.
+    """
+
+    hands: list[list[SetbackCard]] = Field(
+        default_factory=list,
+        description="hand of each player, list order matches player order",
+    )
+
+    @property
+    def player_count(self) -> int:
+        return len(self.hands)
+
+    @property
     def current_hand(self) -> list[SetbackCard]:
         return self.hands[self.active_trick.turn]
 
-    @property
-    def best_card_of_trick(self) -> PlayedCard:
-        return self.active_trick.best_card(self.active_trump)
+    def ensure_trump(self, trump: Suit) -> None:
+        self.trump = self.trump or trump
+
+    def is_card_valid(self, card: SetbackCard) -> bool:
+        return self.active_trick.is_card_valid(self.current_hand, card, self.trump)
+
+    def start_trick(self, turn: ModIdx) -> None:
+        self.trick = Trick(game_id=self.game_id, turn=turn)
 
     @property
     def is_complete(self) -> bool:
@@ -247,19 +276,8 @@ class GameRound(GameModel):
         """
         return not any(hand for hand in self.hands)
 
-    def ensure_trump(self, trump: Suit) -> None:
-        self.trump = self.trump or trump
-
-    def is_card_valid(self, card: SetbackCard) -> bool:
-        return self.active_trick.is_card_valid(
-            self.hands[self.active_trick.turn], card, self.trump
-        )
-
     def next_round(self) -> GameRound:
         return self.new_round(self.game_id, self.player_count, self.dealer)
-
-    def start_trick(self, turn: ModIdx) -> None:
-        self.trick = Trick(game_id=self.game_id, turn=turn)
 
     def score_round(self) -> RoundScore:
         """
@@ -304,9 +322,26 @@ class GameRound(GameModel):
         self.score = score
         return score
 
+    def to_player_scoped(
+        self, player_id: PlayerId, order: PlayerOrder
+    ) -> GameRoundPlayerScoped:
+        return GameRoundPlayerScoped(
+            game_id=self.game_id,
+            bid=self.bid,
+            trick=self.trick,
+            dealer=self.dealer,
+            tricks_won=self.tricks_won,
+            trump=self.trump,
+            score=self.score,
+            player_id=player_id,
+            my_hand=self.hands[order.get_idx(player_id)],
+        )
+
     @staticmethod
     def new_round(
-        game_id: int, players: int, dealer_idx: ModIdx | None = None
+        game_id: int,
+        players: int,
+        dealer_idx: ModIdx | None = None,
     ) -> GameRound:
         if players < 2:
             raise InvalidGameStateException(f"cannot start game with {players} players")
@@ -354,11 +389,14 @@ class PlayerOrder(BaseModel):
         return ModIdx(idx=self[player_id].turn, mod=len(self.order))
 
 
-class GameState(GameModel):
+class _GameState(GameModel):
     max_score: int = 11
     phase: Phase
     score: dict[TeamId, int]
     order: PlayerOrder
+
+
+class GameState(_GameState):
     rounds: list[GameRound] = Field(default_factory=list)
     active_round: GameRound
 
@@ -394,18 +432,6 @@ class GameState(GameModel):
             case _:
                 return self.active_round.active_trick.turn
 
-    def _next_round(self) -> None:
-        score = self.active_round.score_round()
-        self.rounds.append(self.active_round)
-
-        team_scores: defaultdict[TeamId, int] = defaultdict(int)
-        for team_id in score.winning_teams:
-            team_scores[team_id] += 1
-            self.score[team_id] = self.score.get(team_id, 0) + 1
-
-        self.active_round = self.active_round.next_round()
-        self.next_phase()
-
     def _check_active_trick(self) -> None:
         if not self.active_round.active_trick.is_complete:
             return
@@ -416,10 +442,6 @@ class GameState(GameModel):
             self.active_round.active_trick
         )
         self.active_round.start_trick(self.order.get_idx(best_card.player_id))
-
-    def _check_active_round(self) -> None:
-        if self.active_round.is_complete:
-            self._next_round()
 
     def process_bid(self, bid: Bid) -> None:
         self.active_round.bid.append(bid)
@@ -441,6 +463,50 @@ class GameState(GameModel):
         self._check_active_round()
 
         self.log.debug("round details", phase=self.phase, score=self.score)
+
+    def to_player_scoped(self, player_id: PlayerId) -> GameStatePlayerScoped:
+        rounds = []
+        for r in self.rounds:
+            rounds.append(r.to_player_scoped(player_id, self.order))
+
+        return GameStatePlayerScoped(
+            game_id=self.game_id,
+            max_score=self.max_score,
+            phase=self.phase,
+            score=self.score,
+            order=self.order,
+            active_round=self.active_round.to_player_scoped(player_id, self.order),
+            rounds=rounds,
+        )
+
+    def _check_active_round(self) -> None:
+        if self.active_round.is_complete:
+            self._next_round()
+
+    def _next_round(self) -> None:
+        score = self.active_round.score_round()
+        self.rounds.append(self.active_round)
+
+        team_scores: defaultdict[TeamId, int] = defaultdict(int)
+        for team_id in score.winning_teams:
+            team_scores[team_id] += 1
+            self.score[team_id] = self.score.get(team_id, 0) + 1
+
+        self.active_round = self.active_round.next_round()
+        self.next_phase()
+
+
+class GameStatePlayerScoped(_GameState):
+    rounds: list[GameRoundPlayerScoped] = Field(default_factory=list)
+    active_round: GameRoundPlayerScoped
+
+    @property
+    def turn(self) -> ModIdx:
+        match self.phase:
+            case Phase.BID:
+                return self.active_round.bid.turn
+            case _:
+                return self.active_round.active_trick.turn
 
 
 class RedisKeys:
@@ -534,18 +600,20 @@ class GameManager:
         for grouped_team in zip(*members.values(), strict=True):
             order.extend(grouped_team)
 
+        player_order = PlayerOrder(
+            order=[
+                GamePlayer(
+                    player_id=member.player_id,
+                    team_id=member.team_id,
+                    turn=i,
+                )
+                for i, member in enumerate(order)
+            ]
+        )
+
         gs = GameState(
             game_id=game.id,
-            order=PlayerOrder(
-                order=[
-                    GamePlayer(
-                        player_id=member.player_id,
-                        team_id=member.team_id,
-                        turn=i,
-                    )
-                    for i, member in enumerate(order)
-                ]
-            ),
+            order=player_order,
             phase=Phase.BID,
             score={team.id: 0 for team in teams},
             active_round=GameRound.new_round(game.id, len(order)),
@@ -561,6 +629,9 @@ class GameManager:
         if not state:
             raise InvalidGameStateException("game has not been started")
         return GameState.model_validate_json(cast(bytes, state))
+
+    def get_state(self, game: Game) -> GameState:
+        return self._load_state(game)
 
     def _save_state(self, state: GameState) -> None:
         redis_set = cast(

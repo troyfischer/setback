@@ -1,6 +1,11 @@
 import { Platform } from 'react-native';
 
-import type { GamePlayer, GameState, ModIndex, SetbackCard } from '../types/setback';
+import type {
+  GamePlayer,
+  GameStatePlayerScoped,
+  ModIndex,
+  SetbackCard,
+} from '../types/setback';
 
 const suitSymbols: Record<SetbackCard['suit'], string> = {
   club: '♣',
@@ -45,7 +50,7 @@ export function normalizeBaseUrl(value: string): string {
   return withProtocol.replace(/\/+$/, '');
 }
 
-export function formatPhase(phase: GameState['phase']): string {
+export function formatPhase(phase: GameStatePlayerScoped['phase']): string {
   return phase.charAt(0).toUpperCase() + phase.slice(1);
 }
 
@@ -72,7 +77,7 @@ export function formatTimestamp(): string {
   });
 }
 
-export function getCurrentTurn(state: GameState): ModIndex {
+export function getCurrentTurn(state: GameStatePlayerScoped): ModIndex {
   if (state.phase === 'bid') {
     return state.active_round.bid.turn;
   }
@@ -80,12 +85,11 @@ export function getCurrentTurn(state: GameState): ModIndex {
   return state.active_round.trick?.turn ?? state.active_round.bid.turn;
 }
 
-export function getCurrentTurnPlayer(state: GameState): GamePlayer | null {
+export function getCurrentTurnPlayer(state: GameStatePlayerScoped): GamePlayer | null {
   const turn = getCurrentTurn(state);
   return state.order.order[turn.idx] ?? null;
 }
 
-export function getCurrentHand(state: GameState): SetbackCard[] {
-  const turn = getCurrentTurn(state);
-  return state.active_round.hands[turn.idx] ?? [];
+export function getMyHand(state: GameStatePlayerScoped): SetbackCard[] {
+  return state.active_round.my_hand ?? [];
 }

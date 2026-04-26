@@ -4,7 +4,7 @@ from typing import Protocol
 
 from httpx import Response
 
-from src.game.manager import GameState, Phase
+from src.game.manager import GameStatePlayerScoped, Phase
 from src.game.models import (
     BidRequest,
     Game,
@@ -18,6 +18,7 @@ from src.game.models import (
 
 class HTTPClient(Protocol):
     def post(self, url: str, **kwargs) -> Response: ...
+    def get(self, url: str, **kwargs) -> Response: ...
 
 
 def create_authenticated_users(client: HTTPClient, users: list[str]) -> dict[str, str]:
@@ -92,19 +93,23 @@ def create_and_join_teams(
     return teams
 
 
-def start_game(client: HTTPClient, auth_token: str, game_id: int) -> GameState:
+def start_game(
+    client: HTTPClient, auth_token: str, game_id: int
+) -> GameStatePlayerScoped:
     res = client.post(
         "/game/start",
         headers={"Authorization": f"Bearer {auth_token}"},
         json=GameRequest(game_id=game_id).model_dump(),
     )
     assert res.status_code == HTTPStatus.OK, f"Failed to start game: {res.text}"
-    return GameState.model_validate(res.json())
+    return GameStatePlayerScoped.model_validate(res.json())
 
 
 def do_bidding(
-    client: HTTPClient, authenticated_users: dict[str, str], game_state: GameState
-) -> GameState:
+    client: HTTPClient,
+    authenticated_users: dict[str, str],
+    game_state: GameStatePlayerScoped,
+) -> GameStatePlayerScoped:
     starting_turn = game_state.turn
 
     for _ in range(len(game_state.order.order)):
@@ -115,41 +120,66 @@ def do_bidding(
             json=BidRequest(game_id=game_state.game_id, amount=2).model_dump(),
         )
         assert res.status_code == HTTPStatus.OK, f"Bid failed: {res.text}"
-        game_state = GameState.model_validate(res.json())
+        game_state = GameStatePlayerScoped.model_validate(res.json())
 
     assert game_state.phase != Phase.BID
     assert game_state.active_round.bid.turn == starting_turn
     return game_state
 
 
+def fetch_player_state(
+    client: HTTPClient,
+    auth_token: str,
+    game_id: int,
+) -> GameStatePlayerScoped:
+    res = client.get(
+        f"/game/{game_id}/state",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert res.status_code == HTTPStatus.OK, f"Failed to fetch state: {res.text}"
+    return GameStatePlayerScoped.model_validate(res.json())
+
+
 def play_trick(
-    client: HTTPClient, authenticated_users: dict[str, str], game_state: GameState
-) -> GameState:
+    client: HTTPClient,
+    authenticated_users: dict[str, str],
+    game_state: GameStatePlayerScoped,
+) -> GameStatePlayerScoped:
     for _ in range(len(game_state.order.order)):
-        card = game_state.active_round.current_hand[0]
-        for possible_card in game_state.active_round.current_hand:
-            if game_state.active_round.is_card_valid(possible_card):
+        player_id = game_state.order[game_state.turn].player_id
+        auth_token = authenticated_users[player_id]
+
+        # Fetch the state scoped to this player so we can see their hand.
+        player_state = fetch_player_state(client, auth_token, game_state.game_id)
+        my_hand = player_state.active_round.my_hand
+        trump = player_state.active_round.trump
+        active_trick = player_state.active_round.active_trick
+
+        card = my_hand[0]
+        for possible_card in my_hand:
+            if active_trick.is_card_valid(my_hand, possible_card, trump):
                 card = possible_card
                 break
 
-        player_id = game_state.order[game_state.turn].player_id
         res = client.post(
             "/game/trick/play",
-            headers={"Authorization": f"Bearer {authenticated_users[player_id]}"},
+            headers={"Authorization": f"Bearer {auth_token}"},
             json=PlayCardRequest(
                 game_id=game_state.game_id,
                 card=card,
             ).model_dump(),
         )
         assert res.status_code == HTTPStatus.OK, f"Failed to play card: {res.text}"
-        game_state = GameState.model_validate(res.json())
+        game_state = GameStatePlayerScoped.model_validate(res.json())
 
     return game_state
 
 
 def play_full_game(
-    client: HTTPClient, authenticated_users: dict[str, str], game_state: GameState
-) -> tuple[GameState, int]:
+    client: HTTPClient,
+    authenticated_users: dict[str, str],
+    game_state: GameStatePlayerScoped,
+) -> tuple[GameStatePlayerScoped, int]:
     tricks_played = 0
 
     while game_state.phase != Phase.COMPLETE:

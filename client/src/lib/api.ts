@@ -1,9 +1,10 @@
 import type {
   BidRequest,
+  CurrentUser,
   GameManagementRequest,
   GameRecord,
   GameRequest,
-  GameState,
+  GameStatePlayerScoped,
   PlayCardRequest,
   SubscribeTokenResponse,
   TeamMemberRecord,
@@ -59,6 +60,13 @@ export async function createDevToken(baseUrl: string, username: string) {
 export async function refreshAccessToken(baseUrl: string) {
   return requestJson<TokenResponse>(`${baseUrl}/auth/refresh`, {
     credentials: 'include',
+    method: 'GET',
+  });
+}
+
+export async function fetchMe(baseUrl: string, token: string) {
+  return requestJson<CurrentUser>(`${baseUrl}/auth/me`, {
+    headers: withBearer(token),
     method: 'GET',
   });
 }
@@ -126,7 +134,7 @@ export async function joinTeam(
 }
 
 export async function startGame(baseUrl: string, token: string, request: GameRequest) {
-  return requestJson<GameState>(`${baseUrl}/game/start`, {
+  return requestJson<GameStatePlayerScoped>(`${baseUrl}/game/start`, {
     body: JSON.stringify(request),
     headers: {
       ...withBearer(token),
@@ -137,7 +145,7 @@ export async function startGame(baseUrl: string, token: string, request: GameReq
 }
 
 export async function bidGame(baseUrl: string, token: string, request: BidRequest) {
-  return requestJson<GameState>(`${baseUrl}/game/bid`, {
+  return requestJson<GameStatePlayerScoped>(`${baseUrl}/game/bid`, {
     body: JSON.stringify(request),
     headers: {
       ...withBearer(token),
@@ -152,7 +160,7 @@ export async function playCard(
   token: string,
   request: PlayCardRequest,
 ) {
-  return requestJson<GameState>(`${baseUrl}/game/trick/play`, {
+  return requestJson<GameStatePlayerScoped>(`${baseUrl}/game/trick/play`, {
     body: JSON.stringify(request),
     headers: {
       ...withBearer(token),
