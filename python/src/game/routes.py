@@ -192,7 +192,10 @@ async def create_team(
     if team:
         raise HTTPException(400, "player already owner of team")
 
-    t = Team(game_id=game.id, owner=player.id)
+    teams = db.exec(select(Team).where((Team.game_id == game.id)))
+    team_number = max((t.team_number for t in teams), default=0)
+
+    t = Team(game_id=game.id, owner=player.id, team_number=team_number + 1)
 
     db.add(t)
     db.flush()

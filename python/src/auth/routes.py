@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from starlette.requests import Request
@@ -17,6 +17,8 @@ from src.request import RequestContext
 
 router = APIRouter(prefix="/auth")
 
+_LOCAL_DEV_HOSTS = {"localhost", "127.0.0.1"}
+
 _handlers = {h.provider: h for h in [GoogleOAuth()]}
 
 
@@ -25,6 +27,19 @@ def _get_handler(provider: str) -> GoogleOAuth:
     if handler is None:
         raise HTTPException(404, f"Unknown OAuth provider: {provider}")
     return handler
+
+
+def _refresh_cookie_secure(request: Request) -> bool:
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    if forwarded_proto:
+        scheme = forwarded_proto.split(",", 1)[0].strip()
+    else:
+        scheme = request.url.scheme
+
+    host = request.url.hostname or ""
+    if scheme != "https":
+        return False
+    return host not in _LOCAL_DEV_HOSTS
 
 
 @router.get("/{provider}/login")
@@ -65,7 +80,6 @@ async def oauth_callback(
     ctx: RequestContext,
     provider: str,
     request: Request,
-    response: Response,
     db: DBSession,
     jwt: JwtManager,
 ):
@@ -79,21 +93,22 @@ async def oauth_callback(
     access_token = jwt.create_access_token(merged.sub)
     refresh_token = jwt.create_refresh_token(merged.sub)
 
-    response.set_cookie(
-        key="refresh_token",
-        value=refresh_token,
-        max_age=30 * 24 * 60 * 60,  # 30 days in seconds
-        httponly=True,  # Can't be accessed by JavaScript
-        secure=True,  # HTTPS only (set False for localhost dev)
-        samesite="lax",  # CSRF protection
-    )
-    return HTMLResponse(
+    response = HTMLResponse(
         content=str(HTMLTemplate(access_token, settings.client_origin)),
         headers={
             "Cache-Control": "no-store",
             "X-Frame-Options": "DENY",
         },
     )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        max_age=30 * 24 * 60 * 60,  # 30 days in seconds
+        httponly=True,  # Can't be accessed by JavaScript
+        secure=_refresh_cookie_secure(request),
+        samesite="lax",  # CSRF protection
+    )
+    return response
 
 
 @router.get("/refresh")
@@ -138,7 +153,7 @@ async def dev_token(
         at_hash="test",
         aud="test",
         azp="test",
-        email="test",
+        email="test@email.com",
         email_verified=True,
         exp=datetime.now(),
         family_name="test",
@@ -148,7 +163,7 @@ async def dev_token(
         nonce="test",
         picture="test",
         sub=form_data.username,
-        name="test",
+        name=form_data.username,
     )
     _ = db.merge(user)
     db.commit()
