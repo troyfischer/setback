@@ -50,6 +50,7 @@ export async function createDevToken(baseUrl: string, username: string) {
 
   return requestJson<TokenResponse>(`${baseUrl}/auth/token`, {
     body: form.toString(),
+    credentials: "include",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
     },
