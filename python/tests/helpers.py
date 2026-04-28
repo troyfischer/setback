@@ -54,7 +54,8 @@ def join_game(
             "/game/join",
             headers={"Authorization": f"Bearer {authenticated_users[user]}"},
             json=GameManagementRequest(
-                game_id=game.id, secret=game.join_code
+                game_id=game.id,
+                secret=game.join_code,
             ).model_dump(),
         )
         assert res.status_code == HTTPStatus.OK, (
@@ -85,7 +86,7 @@ def create_and_join_teams(
                 "/team/join",
                 headers={"Authorization": f"Bearer {authenticated_users[member]}"},
                 json=UpdateTeamRequest(
-                    game_id=team.game_id, team_id=team.id
+                    team_id=team.id, game_id=team.game_id
                 ).model_dump(),
             )
             assert res.status_code == HTTPStatus.OK, f"Failed to join team: {res.text}"

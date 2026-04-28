@@ -11,8 +11,8 @@ from sqlalchemy import Engine
 from sqlmodel import SQLModel, create_engine
 from starlette.middleware.sessions import SessionMiddleware
 
-import src.auth.router
-import src.game.router
+import src.auth.routes
+import src.game.routes
 from src.config import Settings
 from src.game.manager import GameManager
 from src.game.sse import ConnectionManager, RedisSubscriber
@@ -66,8 +66,8 @@ app.add_middleware(
     allow_methods=["*"],
 )
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
-app.include_router(src.auth.router.router)
-app.include_router(src.game.router.router)
+app.include_router(src.auth.routes.router)
+app.include_router(src.game.routes.router)
 
 
 @app.get("/health")

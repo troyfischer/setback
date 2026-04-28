@@ -1,12 +1,18 @@
-import { StatusBar } from 'expo-status-bar';
-import { LinearGradient } from 'expo-linear-gradient';
-import { startTransition, useDeferredValue, useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StatusBar } from "expo-status-bar";
+import { LinearGradient } from "expo-linear-gradient";
+import { startTransition, useDeferredValue, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
-import { GameScreen } from './src/screens/GameScreen';
-import { LobbyScreen } from './src/screens/LobbyScreen';
-import { WelcomeScreen } from './src/screens/WelcomeScreen';
-import { useGameSubscription } from './src/hooks/useGameSubscription';
+import { GameScreen } from "./src/screens/GameScreen";
+import { LobbyScreen } from "./src/screens/LobbyScreen";
+import { WelcomeScreen } from "./src/screens/WelcomeScreen";
+import { useGameSubscription } from "./src/hooks/useGameSubscription";
 import {
   bidGame,
   createDevToken,
@@ -19,9 +25,13 @@ import {
   playCard,
   refreshAccessToken,
   startGame,
-} from './src/lib/api';
-import { loginWithGoogle } from './src/lib/auth';
-import { formatCard, getDefaultApiBaseUrl, normalizeBaseUrl } from './src/lib/format';
+} from "./src/lib/api";
+import { loginWithGoogle } from "./src/lib/auth";
+import {
+  formatCard,
+  getDefaultApiBaseUrl,
+  normalizeBaseUrl,
+} from "./src/lib/format";
 import type {
   CurrentUser,
   GameEvent,
@@ -29,23 +39,25 @@ import type {
   GameStatePlayerScoped,
   SetbackCard,
   TeamRecord,
-} from './src/types/setback';
+} from "./src/types/setback";
 
 const BID_OPTIONS = [0, 2, 3, 4] as const;
 
 export default function App() {
   const [hydrated, setHydrated] = useState(false);
   const [baseUrl, setBaseUrl] = useState(getDefaultApiBaseUrl());
-  const [guestName, setGuestName] = useState('');
-  const [accessToken, setAccessToken] = useState('');
+  const [guestName, setGuestName] = useState("");
+  const [accessToken, setAccessToken] = useState("");
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
-  const [gameIdInput, setGameIdInput] = useState('');
-  const [joinCode, setJoinCode] = useState('');
-  const [teamIdInput, setTeamIdInput] = useState('');
+  const [gameIdInput, setGameIdInput] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [teamIdInput, setTeamIdInput] = useState("");
   const [createdGame, setCreatedGame] = useState<GameRecord | null>(null);
   const [knownTeams, setKnownTeams] = useState<TeamRecord[]>([]);
   const [activeGameId, setActiveGameId] = useState<number | null>(null);
-  const [gameState, setGameState] = useState<GameStatePlayerScoped | null>(null);
+  const [gameState, setGameState] = useState<GameStatePlayerScoped | null>(
+    null,
+  );
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +126,8 @@ export default function App() {
     try {
       await action();
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : 'Unknown error';
+      const message =
+        caught instanceof Error ? caught.message : "Unknown error";
       setError(message);
     } finally {
       setBusyAction(null);
@@ -126,17 +139,17 @@ export default function App() {
     setKnownTeams([]);
     setActiveGameId(null);
     setGameState(null);
-    setGameIdInput('');
-    setJoinCode('');
-    setTeamIdInput('');
+    setGameIdInput("");
+    setJoinCode("");
+    setTeamIdInput("");
   }
 
   async function handleDevLogin() {
-    await runAction('Dev login', async () => {
+    await runAction("Dev login", async () => {
       const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
       const trimmedName = guestName.trim();
       if (!trimmedName) {
-        throw new Error('Enter a name to continue as guest.');
+        throw new Error("Enter a name to continue as guest.");
       }
 
       const token = await createDevToken(normalizedBaseUrl, trimmedName);
@@ -152,7 +165,7 @@ export default function App() {
   }
 
   async function handleGoogleLogin() {
-    await runAction('Google login', async () => {
+    await runAction("Google login", async () => {
       const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
       const token = await loginWithGoogle(normalizedBaseUrl);
       const user = await fetchMe(normalizedBaseUrl, token.access_token);
@@ -168,7 +181,7 @@ export default function App() {
   }
 
   async function handleLogout() {
-    await runAction('Logout', async () => {
+    await runAction("Logout", async () => {
       const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
       if (accessToken) {
         try {
@@ -180,20 +193,20 @@ export default function App() {
 
       startTransition(() => {
         setBaseUrl(normalizedBaseUrl);
-        setAccessToken('');
+        setAccessToken("");
         setCurrentUser(null);
-        setGuestName('');
+        setGuestName("");
         resetLocalGameContext();
       });
 
-      setNotice('Signed out.');
+      setNotice("Signed out.");
     });
   }
 
   async function handleCreateGame() {
-    await runAction('Create game', async () => {
+    await runAction("Create game", async () => {
       if (!accessToken) {
-        throw new Error('Sign in before creating a game.');
+        throw new Error("Sign in before creating a game.");
       }
 
       const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
@@ -212,23 +225,25 @@ export default function App() {
         setJoinCode(game.join_code);
       });
 
-      setNotice(`Created table #${game.id}. Share the join code with your players.`);
+      setNotice(
+        `Created table #${game.id}. Share the join code with your players.`,
+      );
     });
   }
 
   async function handleJoinGame() {
-    await runAction('Join game', async () => {
+    await runAction("Join game", async () => {
       if (!accessToken) {
-        throw new Error('Sign in before joining a game.');
+        throw new Error("Sign in before joining a game.");
       }
 
       const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
       const gameId = Number.parseInt(gameIdInput, 10);
       if (!Number.isInteger(gameId)) {
-        throw new Error('Enter a numeric game number.');
+        throw new Error("Enter a numeric game number.");
       }
       if (!joinCode.trim()) {
-        throw new Error('Enter the join code your host shared.');
+        throw new Error("Enter the join code your host shared.");
       }
 
       await joinGame(normalizedBaseUrl, accessToken, {
@@ -246,9 +261,9 @@ export default function App() {
   }
 
   async function handleCreateTeam() {
-    await runAction('Create team', async () => {
+    await runAction("Create team", async () => {
       if (!accessToken || !activeGameId) {
-        throw new Error('Join a game before creating a team.');
+        throw new Error("Join a game before creating a team.");
       }
 
       const team = await createTeam(normalizeBaseUrl(baseUrl), accessToken, {
@@ -269,14 +284,14 @@ export default function App() {
   }
 
   async function handleJoinTeam() {
-    await runAction('Join team', async () => {
+    await runAction("Join team", async () => {
       if (!accessToken || !activeGameId) {
-        throw new Error('Join a game before joining a team.');
+        throw new Error("Join a game before joining a team.");
       }
 
       const teamId = Number.parseInt(teamIdInput, 10);
       if (!Number.isInteger(teamId)) {
-        throw new Error('Enter a numeric team number.');
+        throw new Error("Enter a numeric team number.");
       }
 
       await joinTeam(normalizeBaseUrl(baseUrl), accessToken, {
@@ -289,9 +304,9 @@ export default function App() {
   }
 
   async function handleStartGame() {
-    await runAction('Start game', async () => {
+    await runAction("Start game", async () => {
       if (!accessToken || !activeGameId) {
-        throw new Error('Create or join a game first.');
+        throw new Error("Create or join a game first.");
       }
 
       const state = await startGame(normalizeBaseUrl(baseUrl), accessToken, {
@@ -309,7 +324,7 @@ export default function App() {
   async function handleBid(amount: (typeof BID_OPTIONS)[number]) {
     await runAction(`Bid ${amount}`, async () => {
       if (!accessToken || !activeGameId) {
-        throw new Error('Join a live game before bidding.');
+        throw new Error("Join a live game before bidding.");
       }
 
       const state = await bidGame(normalizeBaseUrl(baseUrl), accessToken, {
@@ -326,7 +341,7 @@ export default function App() {
   async function handlePlayCard(card: SetbackCard) {
     await runAction(`Play ${formatCard(card)}`, async () => {
       if (!accessToken || !activeGameId) {
-        throw new Error('Join a live game before playing a card.');
+        throw new Error("Join a live game before playing a card.");
       }
 
       const state = await playCard(normalizeBaseUrl(baseUrl), accessToken, {
@@ -342,12 +357,15 @@ export default function App() {
 
   function handleLeaveTable() {
     resetLocalGameContext();
-    setNotice('Left the table.');
+    setNotice("Left the table.");
   }
 
   if (!hydrated) {
     return (
-      <LinearGradient colors={['#0f1b2e', '#132a4a', '#1b4d8c']} style={styles.shell}>
+      <LinearGradient
+        colors={["#0f1b2e", "#132a4a", "#1b4d8c"]}
+        style={styles.shell}
+      >
         <View style={styles.loadingState}>
           <ActivityIndicator color="#f7d774" size="large" />
           <Text style={styles.loadingText}>Shuffling the deck…</Text>
@@ -361,7 +379,10 @@ export default function App() {
   const showGame = Boolean(activeGameId) && Boolean(deferredGameState);
 
   return (
-    <LinearGradient colors={['#09111f', '#132a4a', '#7d2a24']} style={styles.shell}>
+    <LinearGradient
+      colors={["#09111f", "#132a4a", "#7d2a24"]}
+      style={styles.shell}
+    >
       <StatusBar style="light" />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {showWelcome ? (
@@ -442,20 +463,20 @@ export default function App() {
 function isScopedGameStateEvent(
   event: GameEvent,
 ): event is GameEvent & { data: GameStatePlayerScoped } {
-  return 'active_round' in event.data;
+  return "active_round" in event.data;
 }
 
 const styles = StyleSheet.create({
   loadingState: {
-    alignItems: 'center',
+    alignItems: "center",
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
     rowGap: 14,
   },
   loadingText: {
-    color: '#f8fbff',
+    color: "#f8fbff",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   scrollContent: {
     flexGrow: 1,

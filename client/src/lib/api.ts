@@ -11,12 +11,12 @@ import type {
   TeamRecord,
   TokenResponse,
   UpdateTeamRequest,
-} from '../types/setback';
+} from "../types/setback";
 
 async function readError(response: Response) {
   try {
     const parsed = (await response.json()) as { detail?: string } | string;
-    if (typeof parsed === 'string') {
+    if (typeof parsed === "string") {
       return parsed;
     }
     if (parsed.detail) {
@@ -45,37 +45,37 @@ function withBearer(token: string) {
 
 export async function createDevToken(baseUrl: string, username: string) {
   const form = new URLSearchParams();
-  form.set('username', username);
-  form.set('password', 'dev-password');
+  form.set("username", username);
+  form.set("password", "dev-password");
 
   return requestJson<TokenResponse>(`${baseUrl}/auth/token`, {
     body: form.toString(),
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
+      "Content-Type": "application/x-www-form-urlencoded",
     },
-    method: 'POST',
+    method: "POST",
   });
 }
 
 export async function refreshAccessToken(baseUrl: string) {
   return requestJson<TokenResponse>(`${baseUrl}/auth/refresh`, {
-    credentials: 'include',
-    method: 'GET',
+    credentials: "include",
+    method: "GET",
   });
 }
 
 export async function fetchMe(baseUrl: string, token: string) {
   return requestJson<CurrentUser>(`${baseUrl}/auth/me`, {
     headers: withBearer(token),
-    method: 'GET',
+    method: "GET",
   });
 }
 
 export async function logout(baseUrl: string, token: string) {
   const response = await fetch(`${baseUrl}/auth/logout`, {
-    credentials: 'include',
+    credentials: "include",
     headers: withBearer(token),
-    method: 'GET',
+    method: "GET",
   });
 
   if (!response.ok) {
@@ -88,7 +88,7 @@ export async function logout(baseUrl: string, token: string) {
 export async function createGame(baseUrl: string, token: string) {
   return requestJson<GameRecord>(`${baseUrl}/game/create`, {
     headers: withBearer(token),
-    method: 'POST',
+    method: "POST",
   });
 }
 
@@ -101,20 +101,24 @@ export async function joinGame(
     body: JSON.stringify(request),
     headers: {
       ...withBearer(token),
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
-    method: 'POST',
+    method: "POST",
   });
 }
 
-export async function createTeam(baseUrl: string, token: string, request: GameRequest) {
+export async function createTeam(
+  baseUrl: string,
+  token: string,
+  request: GameRequest,
+) {
   return requestJson<TeamRecord>(`${baseUrl}/team/create`, {
     body: JSON.stringify(request),
     headers: {
       ...withBearer(token),
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
-    method: 'POST',
+    method: "POST",
   });
 }
 
@@ -127,31 +131,39 @@ export async function joinTeam(
     body: JSON.stringify(request),
     headers: {
       ...withBearer(token),
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
-    method: 'POST',
+    method: "POST",
   });
 }
 
-export async function startGame(baseUrl: string, token: string, request: GameRequest) {
+export async function startGame(
+  baseUrl: string,
+  token: string,
+  request: GameRequest,
+) {
   return requestJson<GameStatePlayerScoped>(`${baseUrl}/game/start`, {
     body: JSON.stringify(request),
     headers: {
       ...withBearer(token),
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
-    method: 'POST',
+    method: "POST",
   });
 }
 
-export async function bidGame(baseUrl: string, token: string, request: BidRequest) {
+export async function bidGame(
+  baseUrl: string,
+  token: string,
+  request: BidRequest,
+) {
   return requestJson<GameStatePlayerScoped>(`${baseUrl}/game/bid`, {
     body: JSON.stringify(request),
     headers: {
       ...withBearer(token),
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
-    method: 'POST',
+    method: "POST",
   });
 }
 
@@ -164,15 +176,22 @@ export async function playCard(
     body: JSON.stringify(request),
     headers: {
       ...withBearer(token),
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
-    method: 'POST',
+    method: "POST",
   });
 }
 
-export async function createSubscribeToken(baseUrl: string, token: string, gameId: number) {
-  return requestJson<SubscribeTokenResponse>(`${baseUrl}/game/${gameId}/subscribe-token`, {
-    headers: withBearer(token),
-    method: 'POST',
-  });
+export async function createSubscribeToken(
+  baseUrl: string,
+  token: string,
+  gameId: number,
+) {
+  return requestJson<SubscribeTokenResponse>(
+    `${baseUrl}/game/${gameId}/subscribe-token`,
+    {
+      headers: withBearer(token),
+      method: "POST",
+    },
+  );
 }

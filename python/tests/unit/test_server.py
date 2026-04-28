@@ -2,6 +2,9 @@
 # pyright: basic
 
 import asyncio
+from datetime import datetime
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from http import HTTPStatus
 
 import pytest
@@ -9,7 +12,9 @@ from fakeredis import FakeRedis
 from fakeredis.aioredis import FakeRedis as AsyncFakeRedis
 from fastapi.testclient import TestClient
 
-from src.game import router as game_router
+from src.auth import routes as auth_routes
+from src.auth.sso.models import OAuthUser
+from src.game import routes as game_routes
 from src.game.manager import GameStatePlayerScoped
 from src.game.models import Game, Team
 from src.game.events import GameEvent
@@ -42,6 +47,18 @@ def patch_redis():
     mp.setattr("src.main.redis.from_url", lambda url: fake)
     yield fake
     mp.undo()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def temp_database():
+    from pytest import MonkeyPatch
+
+    with TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "test.sqlite3"
+        mp = MonkeyPatch()
+        mp.setenv("DATABASE_URL", f"sqlite:///{db_path}")
+        yield db_path
+        mp.undo()
 
 
 @pytest.fixture(scope="session")
@@ -141,6 +158,41 @@ def test_oauth_unknown_provider_returns_404(client: TestClient):
     assert res.status_code == HTTPStatus.NOT_FOUND
 
 
+def test_oauth_callback_sets_refresh_cookie_and_refresh_succeeds(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class FakeGoogleOAuth:
+        async def callback(self, request):
+            return OAuthUser(
+                at_hash="test",
+                aud="test",
+                azp="test",
+                email="player@example.com",
+                email_verified=True,
+                exp=datetime.now(),
+                family_name="Player",
+                given_name="Test",
+                iat=datetime.now(),
+                iss="test",
+                name="Test Player",
+                nonce="test",
+                picture="test",
+                sub="google-user-1",
+            )
+
+    monkeypatch.setitem(auth_routes._handlers, "google", FakeGoogleOAuth())
+
+    callback_res = client.get("/auth/google/callback")
+    assert callback_res.status_code == HTTPStatus.OK
+    assert "refresh_token=" in callback_res.headers.get("set-cookie", "")
+    assert "Secure" not in callback_res.headers.get("set-cookie", "")
+
+    refresh_res = client.get("/auth/refresh")
+    assert refresh_res.status_code == HTTPStatus.OK
+    assert refresh_res.json()["access_token"]
+
+
 def test_subscribe_requires_auth(client: TestClient, game: Game):
     res = client.get(f"/game/{game.id}/subscribe")
     assert res.status_code == HTTPStatus.UNAUTHORIZED
@@ -178,9 +230,9 @@ def test_subscribe_token_and_stream_connect(
     join_game(client, authenticated_users, game, [USERS[0]])
 
     async def finite_stream(*args, **kwargs):
-        yield "data: {\"ok\": true}\n\n"
+        yield 'data: {"ok": true}\n\n'
 
-    monkeypatch.setattr(game_router, "sse_event_stream", finite_stream)
+    monkeypatch.setattr(game_routes, "sse_event_stream", finite_stream)
 
     token_res = client.post(
         f"/game/{game.id}/subscribe-token",
@@ -217,7 +269,9 @@ def test_subscribe_rejects_token_for_different_game(
 def test_sse_event_stream_emits_keepalive_then_data():
     async def consume() -> tuple[str, str]:
         cm = ConnectionManager(max_queue_size=2)
-        stream = game_router.sse_event_stream(42, "player-a", cm, heartbeat_seconds=0.01)
+        stream = game_routes.sse_event_stream(
+            42, "player-a", cm, heartbeat_seconds=0.01
+        )
 
         retry_line = await anext(stream)
         keepalive_line = await anext(stream)
@@ -232,7 +286,7 @@ def test_sse_event_stream_emits_keepalive_then_data():
         return retry_line, keepalive_line + data_line
 
     retry, combined = asyncio.run(consume())
-    assert retry == f"retry: {game_router.SSE_RETRY_MILLISECONDS}\n\n"
+    assert retry == f"retry: {game_routes.SSE_RETRY_MILLISECONDS}\n\n"
     assert ": keep-alive\n\n" in combined
     assert "data: " in combined
     assert '"event_type": "bid_placed"' in combined

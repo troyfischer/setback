@@ -1,5 +1,5 @@
-export type Suit = 'club' | 'diamond' | 'heart' | 'spade';
-export type Phase = 'bid' | 'complete' | 'play';
+export type Suit = "club" | "diamond" | "heart" | "spade";
+export type Phase = "bid" | "complete" | "play";
 
 export type TokenResponse = {
   access_token: string;
@@ -115,13 +115,13 @@ export type GameStatePlayerScoped = {
 export type GameEvent = {
   data: GameStatePlayerScoped | Record<string, unknown>;
   event_type:
-    | 'bid_placed'
-    | 'card_played'
-    | 'game_complete'
-    | 'game_started'
-    | 'round_complete'
-    | 'state_update'
-    | 'trick_won';
+    | "bid_placed"
+    | "card_played"
+    | "game_complete"
+    | "game_started"
+    | "round_complete"
+    | "state_update"
+    | "trick_won";
   game_id: number;
 };
 
