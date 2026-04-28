@@ -34,6 +34,7 @@ export type TeamRecord = {
   game_id: number;
   id: number;
   owner: string;
+  team_number: number;
 };
 
 export type TeamMemberRecord = {
@@ -134,7 +135,7 @@ export type GameManagementRequest = GameRequest & {
 };
 
 export type UpdateTeamRequest = GameRequest & {
-  team_id: number;
+  team_number: number;
 };
 
 export type BidRequest = GameRequest & {

@@ -83,7 +83,7 @@ class PlayCardRequest(GameRequest):
 
 
 class UpdateTeamRequest(GameRequest):
-    team_id: int
+    team_number: int
 
 
 class TeamMembership(BaseModel):

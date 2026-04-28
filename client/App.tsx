@@ -49,9 +49,8 @@ export default function App() {
   const [guestName, setGuestName] = useState("");
   const [accessToken, setAccessToken] = useState("");
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
-  const [gameIdInput, setGameIdInput] = useState("");
   const [joinCode, setJoinCode] = useState("");
-  const [teamIdInput, setTeamIdInput] = useState("");
+  const [teamInput, setTeamInput] = useState({ number: "" });
   const [createdGame, setCreatedGame] = useState<GameRecord | null>(null);
   const [knownTeams, setKnownTeams] = useState<TeamRecord[]>([]);
   const [activeGameId, setActiveGameId] = useState<number | null>(null);
@@ -139,9 +138,8 @@ export default function App() {
     setKnownTeams([]);
     setActiveGameId(null);
     setGameState(null);
-    setGameIdInput("");
     setJoinCode("");
-    setTeamIdInput("");
+    setTeamInput({ number: "" });
   }
 
   async function handleDevLogin() {
@@ -221,8 +219,7 @@ export default function App() {
         setKnownTeams([]);
         setGameState(null);
         setActiveGameId(game.id);
-        setGameIdInput(String(game.id));
-        setJoinCode(game.join_code);
+        setJoinCode(`${game.id}-${game.join_code}`);
       });
 
       setNotice(
@@ -238,17 +235,20 @@ export default function App() {
       }
 
       const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
-      const gameId = Number.parseInt(gameIdInput, 10);
-      if (!Number.isInteger(gameId)) {
-        throw new Error("Enter a numeric game number.");
+      const trimmed = joinCode.trim();
+      const separatorIdx = trimmed.indexOf("-");
+      if (separatorIdx === -1) {
+        throw new Error("Invalid join code. Paste the full code your host shared.");
       }
-      if (!joinCode.trim()) {
-        throw new Error("Enter the join code your host shared.");
+      const gameId = Number.parseInt(trimmed.slice(0, separatorIdx), 10);
+      const secret = trimmed.slice(separatorIdx + 1);
+      if (!Number.isInteger(gameId) || !secret) {
+        throw new Error("Invalid join code. Paste the full code your host shared.");
       }
 
       await joinGame(normalizedBaseUrl, accessToken, {
         game_id: gameId,
-        secret: joinCode.trim(),
+        secret,
       });
 
       startTransition(() => {
@@ -276,10 +276,10 @@ export default function App() {
             ? current
             : [...current, team],
         );
-        setTeamIdInput(String(team.id));
+        setTeamInput({ number: String(team.team_number) });
       });
 
-      setNotice(`Created team ${team.id}.`);
+      setNotice(`Created team ${team.team_number}.`);
     });
   }
 
@@ -289,17 +289,17 @@ export default function App() {
         throw new Error("Join a game before joining a team.");
       }
 
-      const teamId = Number.parseInt(teamIdInput, 10);
-      if (!Number.isInteger(teamId)) {
+      const teamNumber = Number.parseInt(teamInput.number, 10);
+      if (!Number.isInteger(teamNumber)) {
         throw new Error("Enter a numeric team number.");
       }
 
       await joinTeam(normalizeBaseUrl(baseUrl), accessToken, {
         game_id: activeGameId,
-        team_id: teamId,
+        team_number: teamNumber,
       });
 
-      setNotice(`Joined team ${teamId}.`);
+      setNotice(`Joined team ${teamNumber}.`);
     });
   }
 
@@ -426,13 +426,11 @@ export default function App() {
             createdGame={createdGame}
             currentUser={currentUser}
             error={error}
-            gameIdInput={gameIdInput}
             joinCode={joinCode}
             knownTeams={knownTeams}
             notice={notice}
-            onChangeGameId={setGameIdInput}
             onChangeJoinCode={setJoinCode}
-            onChangeTeamId={setTeamIdInput}
+            onChangeTeamId={(value) => setTeamInput((prev) => ({ ...prev, number: value }))}
             onCreateGame={() => {
               void handleCreateGame();
             }}
@@ -452,7 +450,7 @@ export default function App() {
             onStartGame={() => {
               void handleStartGame();
             }}
-            teamIdInput={teamIdInput}
+            teamIdInput={teamInput.number}
           />
         )}
       </ScrollView>

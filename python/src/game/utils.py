@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import Depends, HTTPException
+from sqlmodel import select
 
 from src.auth.sso.models import OAuthUser
 from src.auth.utils import get_current_user
@@ -40,7 +41,11 @@ async def check_in_game(db: DBSession, sub: str, game_id: str | int):
 
 
 async def get_team(req: UpdateTeamRequest, db: DBSession) -> Team:
-    team = db.get(Team, req.team_id)
+    team = db.exec(
+        select(Team).where(
+            Team.game_id == req.game_id, Team.team_number == req.team_number
+        )
+    ).first()
     if not team:
         raise HTTPException(404, "team does not exist")
     return team

@@ -10,11 +10,9 @@ type Props = {
     createdGame: GameRecord | null;
     currentUser: CurrentUser | null;
     error: string | null;
-    gameIdInput: string;
     joinCode: string;
     knownTeams: TeamRecord[];
     notice: string | null;
-    onChangeGameId: (value: string) => void;
     onChangeJoinCode: (value: string) => void;
     onChangeTeamId: (value: string) => void;
     onCreateGame: () => void;
@@ -34,11 +32,9 @@ export function LobbyScreen({
     createdGame,
     currentUser,
     error,
-    gameIdInput,
     joinCode,
     knownTeams,
     notice,
-    onChangeGameId,
     onChangeJoinCode,
     onChangeTeamId,
     onCreateGame,
@@ -53,7 +49,7 @@ export function LobbyScreen({
     const inTable = Boolean(activeGameId);
     const shareCode =
         createdGame?.join_code && createdGame.id === activeGameId
-            ? createdGame.join_code
+            ? `${createdGame.id}-${createdGame.join_code}`
             : null;
     const displayName =
         currentUser?.given_name ||
@@ -117,30 +113,17 @@ export function LobbyScreen({
                             Enter the join code your host shared.
                         </Text>
 
-                        <View style={styles.formRow}>
-                            <View style={styles.flexField}>
-                                <Text style={styles.label}>Game number</Text>
-                                <TextInput
-                                    keyboardType="numeric"
-                                    onChangeText={onChangeGameId}
-                                    placeholder="42"
-                                    placeholderTextColor="#8ca3bf"
-                                    style={styles.input}
-                                    value={gameIdInput}
-                                />
-                            </View>
-                            <View style={styles.flexField}>
-                                <Text style={styles.label}>Join code</Text>
-                                <TextInput
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                    onChangeText={onChangeJoinCode}
-                                    placeholder="table secret"
-                                    placeholderTextColor="#8ca3bf"
-                                    style={styles.input}
-                                    value={joinCode}
-                                />
-                            </View>
+                        <View style={styles.flexField}>
+                            <Text style={styles.label}>Join code</Text>
+                            <TextInput
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                onChangeText={onChangeJoinCode}
+                                placeholder="42-abc123xyz"
+                                placeholderTextColor="#8ca3bf"
+                                style={styles.input}
+                                value={joinCode}
+                            />
                         </View>
                         <ActionButton
                             busy={busyAction === "Join game"}
@@ -211,7 +194,7 @@ export function LobbyScreen({
                                         style={styles.teamBadge}
                                     >
                                         <Text style={styles.teamBadgeText}>
-                                            Team {team.id}
+                                            Team {team.team_number}
                                         </Text>
                                     </View>
                                 ))}

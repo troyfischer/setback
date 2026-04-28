@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from starlette.requests import Request
 
@@ -145,10 +145,12 @@ async def me(user: Annotated[OAuthUser, Depends(get_current_user)]) -> OAuthUser
 @router.post("/token")
 async def dev_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    request: Request,
     db: DBSession,
     jwt: JwtManager,
 ):
-    token = jwt.create_access_token(form_data.username)
+    access_token = jwt.create_access_token(form_data.username)
+    refresh_token = jwt.create_refresh_token(form_data.username)
     user = OAuthUser(
         at_hash="test",
         aud="test",
@@ -168,4 +170,16 @@ async def dev_token(
     _ = db.merge(user)
     db.commit()
 
-    return Token(access_token=token)
+    response = JSONResponse(
+        content=Token(access_token=access_token).model_dump(),
+        headers={"Cache-Control": "no-store"},
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        max_age=30 * 24 * 60 * 60,
+        httponly=True,
+        secure=_refresh_cookie_secure(request),
+        samesite="lax",
+    )
+    return response
