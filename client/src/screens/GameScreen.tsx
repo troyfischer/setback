@@ -1,509 +1,312 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { startTransition, useDeferredValue, useState } from 'react';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 
 import { ActionButton } from '../components/ActionButton';
 import { PlayingCard } from '../components/PlayingCard';
-import { formatCard, formatPhase, getCurrentTurnPlayer, getMyHand } from '../lib/format';
-import type {
-  CurrentUser,
-  GameStatePlayerScoped,
-  SetbackCard,
-} from '../types/setback';
+import { useAuth } from '../context/auth';
+import { useGameSubscription } from '../hooks/useGameSubscription';
+import { bidGame, playCard } from '../lib/api';
+import { formatCard, formatPhase, getCurrentTurnPlayer, getMyHand, normalizeBaseUrl } from '../lib/format';
+import type { GameEvent, GameStatePlayerScoped, SetbackCard } from '../types/setback';
 
 const BID_OPTIONS = [0, 2, 3, 4] as const;
 
 type SubscriptionStatus = 'idle' | 'connecting' | 'live' | 'error';
 
-type Props = {
-  activeGameId: number;
-  busyAction: string | null;
-  currentUser: CurrentUser;
-  error: string | null;
-  gameState: GameStatePlayerScoped;
-  notice: string | null;
-  onBid: (amount: (typeof BID_OPTIONS)[number]) => void;
-  onLeaveTable: () => void;
-  onPlayCard: (card: SetbackCard) => void;
-  streamStatus: SubscriptionStatus;
-};
+export function GameScreen() {
+  const { accessToken, baseUrl, currentUser } = useAuth();
+  const { gameId: gameIdParam } = useParams<{ gameId: string }>();
+  const navigate = useNavigate();
 
-export function GameScreen({
-  activeGameId,
-  busyAction,
-  currentUser,
-  error,
-  gameState,
-  notice,
-  onBid,
-  onLeaveTable,
-  onPlayCard,
-  streamStatus,
-}: Props) {
-  const currentPlayer = getCurrentTurnPlayer(gameState);
-  const myHand = getMyHand(gameState);
-  const trump = gameState.active_round.trump;
-  const trick = gameState.active_round.trick?.collection ?? [];
-  const bidHistory = gameState.active_round.bid.collection;
-  const scoreEntries = Object.entries(gameState.score);
-  const isComplete = gameState.phase === 'complete';
+  const activeGameId = gameIdParam ? Number.parseInt(gameIdParam, 10) : null;
+
+  const [gameState, setGameState] = useState<GameStatePlayerScoped | null>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const deferredGameState = useDeferredValue(gameState);
+
+  const subscription = useGameSubscription({
+    accessToken,
+    baseUrl,
+    enabled: Boolean(accessToken && activeGameId),
+    gameId: activeGameId,
+    onError: (message) => { setError(message); },
+    onEvent: (event: GameEvent) => {
+      if (!('active_round' in event.data)) return;
+      startTransition(() => { setGameState(event.data as GameStatePlayerScoped); });
+    },
+  });
+
+  if (!activeGameId || !currentUser) return <Navigate to="/lobby" replace />;
+  const gameId = activeGameId;
+
+  async function runAction(label: string, action: () => Promise<void>) {
+    setBusyAction(label);
+    setError(null);
+    setNotice(null);
+    try {
+      await action();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unknown error');
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleBid(amount: (typeof BID_OPTIONS)[number]) {
+    await runAction(`Bid ${amount}`, async () => {
+      const state = await bidGame(normalizeBaseUrl(baseUrl), accessToken, { amount, game_id: gameId });
+      startTransition(() => { setGameState(state); });
+    });
+  }
+
+  async function handlePlayCard(card: SetbackCard) {
+    await runAction(`Play ${formatCard(card)}`, async () => {
+      const state = await playCard(normalizeBaseUrl(baseUrl), accessToken, { card, game_id: gameId });
+      startTransition(() => { setGameState(state); });
+    });
+  }
+
+  function handleLeaveTable() {
+    navigate('/lobby');
+  }
+
+  if (!deferredGameState) {
+    return (
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-5 py-8">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-black tracking-tight text-white">Setback</h1>
+            <p className="text-sm text-[#d2deee]">Table #{activeGameId} · Connecting…</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <StreamIndicator status={subscription.status} />
+            <ActionButton label="Leave" onClick={handleLeaveTable} tone="ghost" />
+          </div>
+        </div>
+        <div className="rounded-3xl bg-[#fffaf2] p-8 shadow-xl flex items-center justify-center">
+          <p className="text-sm text-[#5c7593]">Waiting for game state…</p>
+        </div>
+      </div>
+    );
+  }
+
+  const gs = deferredGameState;
+  const currentPlayer = getCurrentTurnPlayer(gs);
+  const myHand = getMyHand(gs);
+  const trump = gs.active_round.trump;
+  const trick = gs.active_round.trick?.collection ?? [];
+  const bidHistory = gs.active_round.bid.collection;
+  const scoreEntries = Object.entries(gs.score);
+  const isComplete = gs.phase === 'complete';
   const yourTurn = currentPlayer?.player_id === currentUser.sub;
-  const canPlay = gameState.phase === 'play' && yourTurn;
+  const canPlay = gs.phase === 'play' && yourTurn;
+  const dealer = gs.order.order[gs.active_round.dealer.idx];
 
   return (
-    <View style={styles.wrapper}>
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.brand}>Setback</Text>
-          <Text style={styles.subBrand}>
-            Table #{activeGameId} · {formatPhase(gameState.phase)}
-          </Text>
-        </View>
-        <View style={styles.headerRight}>
-          <StreamIndicator status={streamStatus} />
-          <ActionButton label="Leave" onPress={onLeaveTable} tone="ghost" />
-        </View>
-      </View>
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-5 py-8">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight text-white">Setback</h1>
+          <p className="text-sm text-[#d2deee]">
+            Table #{activeGameId} · {formatPhase(gs.phase)}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <StreamIndicator status={subscription.status} />
+          <ActionButton label="Leave" onClick={handleLeaveTable} tone="ghost" />
+        </div>
+      </div>
 
-      <View style={styles.scoreRow}>
+      {/* Score row */}
+      <div className="flex flex-wrap gap-2.5">
         {scoreEntries.length > 0 ? (
           scoreEntries.map(([teamId, score]) => (
-            <View key={teamId} style={styles.scoreTile}>
-              <Text style={styles.scoreTeam}>Team {teamId}</Text>
-              <Text style={styles.scoreValue}>{score}</Text>
-            </View>
+            <div key={teamId} className="flex-1 min-w-[110px] rounded-2xl border border-[rgba(247,215,116,0.4)] bg-[rgba(8,17,32,0.55)] px-4 py-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-[#9fb6d4]">Team {teamId}</p>
+              <p className="mt-1 text-2xl font-extrabold text-white">{score}</p>
+            </div>
           ))
         ) : (
-          <View style={styles.scoreTile}>
-            <Text style={styles.scoreTeam}>Score</Text>
-            <Text style={styles.scoreValue}>—</Text>
-          </View>
+          <div className="flex-1 min-w-[110px] rounded-2xl border border-[rgba(247,215,116,0.4)] bg-[rgba(8,17,32,0.55)] px-4 py-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-[#9fb6d4]">Score</p>
+            <p className="mt-1 text-2xl font-extrabold text-white">—</p>
+          </div>
         )}
-        <View style={styles.scoreTile}>
-          <Text style={styles.scoreTeam}>Target</Text>
-          <Text style={styles.scoreValue}>{gameState.max_score}</Text>
-        </View>
-      </View>
+        <div className="flex-1 min-w-[110px] rounded-2xl border border-[rgba(247,215,116,0.4)] bg-[rgba(8,17,32,0.55)] px-4 py-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-[#9fb6d4]">Target</p>
+          <p className="mt-1 text-2xl font-extrabold text-white">{gs.max_score}</p>
+        </div>
+      </div>
 
-      {error ? (
-        <View style={[styles.banner, styles.errorBanner]}>
-          <Text style={styles.bannerText}>{error}</Text>
-        </View>
-      ) : null}
-      {notice && !error ? (
-        <View style={[styles.banner, styles.noticeBanner]}>
-          <Text style={styles.bannerText}>{notice}</Text>
-        </View>
-      ) : null}
+      {error && (
+        <div className="rounded-2xl bg-[rgba(150,45,36,0.94)] px-4 py-3">
+          <p className="text-sm font-semibold text-white">{error}</p>
+        </div>
+      )}
+      {notice && !error && (
+        <div className="rounded-2xl bg-[rgba(31,134,99,0.92)] px-4 py-3">
+          <p className="text-sm font-semibold text-white">{notice}</p>
+        </div>
+      )}
 
       {isComplete ? (
-        <View style={styles.resultCard}>
-          <Text style={styles.resultEyebrow}>Final</Text>
-          <Text style={styles.resultTitle}>Game over</Text>
-          <View style={styles.resultScores}>
+        <div className="rounded-3xl bg-[#fffaf2] p-8 shadow-2xl flex flex-col items-center gap-5">
+          <span className="text-xs font-extrabold uppercase tracking-[1.6px] text-[#b54434]">Final</span>
+          <h2 className="text-3xl font-extrabold text-[#102947]">Game over</h2>
+          <div className="flex flex-wrap justify-center gap-4">
             {scoreEntries.map(([teamId, score]) => (
-              <View key={teamId} style={styles.resultTile}>
-                <Text style={styles.resultTeam}>Team {teamId}</Text>
-                <Text style={styles.resultScore}>{score}</Text>
-              </View>
+              <div key={teamId} className="flex min-w-[120px] flex-col items-center rounded-2xl bg-[#eff4fa] px-6 py-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-[#5c7593]">Team {teamId}</p>
+                <p className="mt-1.5 text-4xl font-extrabold text-[#102947]">{score}</p>
+              </div>
             ))}
-          </View>
-          <ActionButton label="Back To Lobby" onPress={onLeaveTable} />
-        </View>
+          </div>
+          <ActionButton label="Back To Lobby" onClick={handleLeaveTable} />
+        </div>
       ) : (
         <>
-          <View style={styles.card}>
-            <View style={styles.roundRow}>
-              <View style={styles.infoBlock}>
-                <Text style={styles.infoLabel}>Trump</Text>
-                <Text style={styles.infoValue}>
-                  {trump ? capitalize(trump) : 'Not set'}
-                </Text>
-              </View>
-              <View style={styles.infoBlock}>
-                <Text style={styles.infoLabel}>Up next</Text>
-                <Text style={styles.infoValue}>
+          {/* Round info + players */}
+          <div className="rounded-3xl bg-[#fffaf2] p-5 shadow-xl flex flex-col gap-5">
+            <div className="flex flex-wrap gap-6">
+              <div className="flex flex-col gap-1 min-w-[130px]">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-[#5c7593]">Trump</p>
+                <p className="text-xl font-extrabold text-[#102947]">
+                  {trump ? trump.charAt(0).toUpperCase() + trump.slice(1) : 'Not set'}
+                </p>
+              </div>
+              <div className="flex flex-col gap-1 min-w-[130px]">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-[#5c7593]">Dealer</p>
+                <p className="text-xl font-extrabold text-[#102947]">
+                  {dealer ? dealer.player_id : '—'}
+                </p>
+              </div>
+              <div className="flex flex-col gap-1 min-w-[130px]">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-[#5c7593]">Up next</p>
+                <p className="text-xl font-extrabold text-[#102947]">
                   {currentPlayer ? currentPlayer.player_id : 'Pending'}
-                </Text>
-                {yourTurn ? <Text style={styles.yourTurn}>Your turn</Text> : null}
-              </View>
-            </View>
+                </p>
+                {yourTurn && (
+                  <p className="text-xs font-extrabold uppercase tracking-wide text-[#b54434]">Your turn</p>
+                )}
+              </div>
+            </div>
 
-            <View style={styles.playerList}>
-              {gameState.order.order.map((player) => {
+            <div className="flex flex-wrap gap-2">
+              {gs.order.order.map((player) => {
                 const active = player.player_id === currentPlayer?.player_id;
                 return (
-                  <View
+                  <div
                     key={player.player_id}
-                    style={[styles.playerChip, active ? styles.playerChipActive : null]}
+                    className={[
+                      'rounded-xl px-3 py-2.5 flex flex-col gap-0.5 transition-colors',
+                      active ? 'bg-[#102947]' : 'bg-[#eff4fa]',
+                    ].join(' ')}
                   >
-                    <Text style={[styles.playerName, active ? styles.playerNameActive : null]}>
+                    <p className={['text-sm font-bold', active ? 'text-white' : 'text-[#102947]'].join(' ')}>
                       {player.player_id}
-                    </Text>
-                    <Text style={styles.playerTeam}>Team {player.team_id}</Text>
-                  </View>
+                    </p>
+                    <p className={['text-[11px] font-semibold uppercase', active ? 'text-[#9fb6d4]' : 'text-[#5c7593]'].join(' ')}>
+                      Team {player.team_id}
+                    </p>
+                  </div>
                 );
               })}
-            </View>
-          </View>
+            </div>
+          </div>
 
-          {trick.length > 0 ? (
-            <View style={styles.card}>
-              <Text style={styles.sectionTitle}>Current trick</Text>
-              <View style={styles.trickRow}>
-                {trick.map((card, index) => (
-                  <PlayingCard
-                    key={`${card.player_id}-${index}`}
-                    card={card}
-                    caption={card.player_id}
-                  />
+          {/* Current trick */}
+          {trick.length > 0 && (
+            <div className="rounded-3xl bg-[#fffaf2] p-5 shadow-xl flex flex-col gap-4">
+              <h3 className="text-base font-extrabold text-[#102947]">Current trick</h3>
+              <div className="flex flex-wrap gap-3">
+                {trick.map((card, i) => (
+                  <PlayingCard key={`${card.player_id}-${i}`} card={card} caption={card.player_id} />
                 ))}
-              </View>
-            </View>
-          ) : null}
+              </div>
+            </div>
+          )}
 
-          {gameState.phase === 'bid' ? (
-            <View style={styles.card}>
-              <Text style={styles.sectionTitle}>Bidding</Text>
-              <Text style={styles.sectionSubtitle}>
-                Pass or bid how many points your team will take this round.
-              </Text>
-              <View style={styles.bidRow}>
+          {/* Bidding */}
+          {gs.phase === 'bid' && (
+            <div className="rounded-3xl bg-[#fffaf2] p-5 shadow-xl flex flex-col gap-4">
+              <div>
+                <h3 className="text-base font-extrabold text-[#102947]">Bidding</h3>
+                <p className="mt-0.5 text-sm text-[#5c7593]">
+                  Pass or bid how many points your team will take this round.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2.5">
                 {BID_OPTIONS.map((amount) => (
                   <ActionButton
                     key={amount}
                     busy={busyAction === `Bid ${amount}`}
                     label={amount === 0 ? 'Pass' : `Bid ${amount}`}
-                    onPress={() => onBid(amount)}
+                    onClick={() => { void handleBid(amount); }}
                     tone={amount === 0 ? 'ghost' : 'secondary'}
                   />
                 ))}
-              </View>
-
-              {bidHistory.length > 0 ? (
-                <View style={styles.bidHistory}>
-                  <Text style={styles.sectionSubtitle}>This round:</Text>
-                  {bidHistory.map((bid, index) => (
-                    <Text key={`${bid.player_id}-${index}`} style={styles.bidHistoryItem}>
+              </div>
+              {bidHistory.length > 0 && (
+                <div className="rounded-xl bg-[#eff4fa] p-3 flex flex-col gap-1">
+                  <p className="text-xs font-bold text-[#5c7593] uppercase tracking-wide">This round</p>
+                  {bidHistory.map((bid, i) => (
+                    <p key={`${bid.player_id}-${i}`} className="text-sm text-[#173152]">
                       {bid.player_id} {bid.amount === 0 ? 'passed' : `bid ${bid.amount}`}
-                    </Text>
+                    </p>
                   ))}
-                </View>
-              ) : null}
-            </View>
-          ) : null}
+                </div>
+              )}
+            </div>
+          )}
 
-          {myHand.length > 0 ? (
-            <View style={styles.card}>
-              <Text style={styles.sectionTitle}>Your hand</Text>
-              <Text style={styles.sectionSubtitle}>
-                {gameState.phase === 'bid'
-                  ? 'Review your cards, then pass or bid.'
-                  : canPlay
-                    ? 'Tap a card to play it.'
-                    : `Waiting on ${currentPlayer?.player_id ?? 'the next player'}.`}
-              </Text>
-              <View style={styles.handRow}>
-                {myHand.map((card, index) => (
+          {/* Hand */}
+          {myHand.length > 0 && (
+            <div className="rounded-3xl bg-[#fffaf2] p-5 shadow-xl flex flex-col gap-4">
+              <div>
+                <h3 className="text-base font-extrabold text-[#102947]">Your hand</h3>
+                <p className="mt-0.5 text-sm text-[#5c7593]">
+                  {gs.phase === 'bid'
+                    ? 'Review your cards, then pass or bid.'
+                    : canPlay
+                      ? 'Click a card to play it.'
+                      : `Waiting on ${currentPlayer?.player_id ?? 'the next player'}.`}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2.5">
+                {myHand.map((card, i) => (
                   <PlayingCard
-                    key={`${card.suit}-${card.value}-${index}`}
+                    key={`${card.suit}-${card.value}-${i}`}
                     busy={busyAction === `Play ${formatCard(card)}`}
                     card={card}
                     disabled={!canPlay}
-                    onPress={canPlay ? () => onPlayCard(card) : undefined}
+                    onPress={canPlay ? () => { void handlePlayCard(card); } : undefined}
                   />
                 ))}
-              </View>
-            </View>
-          ) : null}
+              </div>
+            </div>
+          )}
         </>
       )}
-    </View>
+    </div>
   );
 }
 
 function StreamIndicator({ status }: { status: SubscriptionStatus }) {
-  const { dot, label } = streamLabel(status);
+  const { color, label } = {
+    live: { color: 'bg-emerald-400', label: 'Live' },
+    connecting: { color: 'bg-yellow-300', label: 'Connecting' },
+    error: { color: 'bg-red-400', label: 'Reconnecting' },
+    idle: { color: 'bg-[#8ca3bf]', label: 'Offline' },
+  }[status];
+
   return (
-    <View style={styles.streamPill}>
-      <View style={[styles.streamDot, { backgroundColor: dot }]} />
-      <Text style={styles.streamText}>{label}</Text>
-    </View>
+    <div className="flex items-center gap-1.5 rounded-full bg-[rgba(8,17,32,0.5)] px-3 py-1.5">
+      <span className={`h-2 w-2 rounded-full ${color}`} />
+      <span className="text-xs font-bold tracking-wide text-[#d2deee]">{label}</span>
+    </div>
   );
 }
-
-function streamLabel(status: SubscriptionStatus) {
-  switch (status) {
-    case 'live':
-      return { dot: '#3cc98a', label: 'Live' };
-    case 'connecting':
-      return { dot: '#f7d774', label: 'Connecting' };
-    case 'error':
-      return { dot: '#d86b5a', label: 'Reconnecting' };
-    default:
-      return { dot: '#8ca3bf', label: 'Offline' };
-  }
-}
-
-function capitalize(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-const styles = StyleSheet.create({
-  banner: {
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  bannerText: {
-    color: '#fdfefe',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  bidHistory: {
-    backgroundColor: '#eff4fa',
-    borderRadius: 14,
-    padding: 12,
-    rowGap: 4,
-  },
-  bidHistoryItem: {
-    color: '#173152',
-    fontSize: 13,
-  },
-  bidRow: {
-    columnGap: 10,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    rowGap: 10,
-  },
-  brand: {
-    color: '#f8fbff',
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-  },
-  card: {
-    backgroundColor: '#fffaf2',
-    borderRadius: 24,
-    padding: 20,
-    rowGap: 14,
-    shadowColor: '#081120',
-    shadowOffset: { height: 8, width: 0 },
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
-  },
-  errorBanner: {
-    backgroundColor: 'rgba(150, 45, 36, 0.94)',
-  },
-  handRow: {
-    columnGap: 10,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    rowGap: 10,
-  },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    justifyContent: 'space-between',
-  },
-  headerLeft: {
-    flexShrink: 1,
-  },
-  headerRight: {
-    alignItems: 'center',
-    columnGap: 10,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    rowGap: 8,
-  },
-  infoBlock: {
-    flexGrow: 1,
-    flexShrink: 1,
-    minWidth: 140,
-    rowGap: 2,
-  },
-  infoLabel: {
-    color: '#5c7593',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  infoValue: {
-    color: '#102947',
-    fontSize: 20,
-    fontWeight: '800',
-  },
-  noticeBanner: {
-    backgroundColor: 'rgba(31, 134, 99, 0.92)',
-  },
-  playerChip: {
-    backgroundColor: '#eff4fa',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    rowGap: 2,
-  },
-  playerChipActive: {
-    backgroundColor: '#102947',
-  },
-  playerList: {
-    columnGap: 10,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    rowGap: 10,
-  },
-  playerName: {
-    color: '#102947',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  playerNameActive: {
-    color: '#f8fbff',
-  },
-  playerTeam: {
-    color: '#5c7593',
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  resultCard: {
-    alignItems: 'center',
-    backgroundColor: '#fffaf2',
-    borderRadius: 28,
-    padding: 28,
-    rowGap: 14,
-    shadowColor: '#081120',
-    shadowOffset: { height: 10, width: 0 },
-    shadowOpacity: 0.2,
-    shadowRadius: 24,
-  },
-  resultEyebrow: {
-    color: '#b54434',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1.6,
-    textTransform: 'uppercase',
-  },
-  resultScore: {
-    color: '#102947',
-    fontSize: 30,
-    fontWeight: '800',
-    marginTop: 4,
-  },
-  resultScores: {
-    columnGap: 14,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    rowGap: 14,
-  },
-  resultTeam: {
-    color: '#5c7593',
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  resultTile: {
-    alignItems: 'center',
-    backgroundColor: '#eff4fa',
-    borderRadius: 18,
-    minWidth: 120,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  resultTitle: {
-    color: '#102947',
-    fontSize: 26,
-    fontWeight: '800',
-  },
-  roundRow: {
-    columnGap: 14,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    rowGap: 14,
-  },
-  scoreRow: {
-    columnGap: 10,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    rowGap: 10,
-  },
-  scoreTeam: {
-    color: '#9fb6d4',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  scoreTile: {
-    backgroundColor: 'rgba(8, 17, 32, 0.55)',
-    borderColor: 'rgba(247, 215, 116, 0.4)',
-    borderRadius: 18,
-    borderWidth: 1,
-    flexGrow: 1,
-    minWidth: 110,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  scoreValue: {
-    color: '#f8fbff',
-    fontSize: 26,
-    fontWeight: '800',
-    marginTop: 4,
-  },
-  sectionSubtitle: {
-    color: '#5c7593',
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  sectionTitle: {
-    color: '#102947',
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  streamDot: {
-    borderRadius: 999,
-    height: 8,
-    width: 8,
-  },
-  streamPill: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(8, 17, 32, 0.5)',
-    borderRadius: 999,
-    columnGap: 6,
-    flexDirection: 'row',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  streamText: {
-    color: '#d2deee',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  subBrand: {
-    color: '#d2deee',
-    fontSize: 13,
-    marginTop: 2,
-  },
-  trickRow: {
-    columnGap: 10,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    rowGap: 10,
-  },
-  wrapper: {
-    alignSelf: 'center',
-    maxWidth: 720,
-    rowGap: 16,
-    width: '100%',
-  },
-  yourTurn: {
-    color: '#b54434',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-});

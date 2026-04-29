@@ -92,6 +92,19 @@ class TeamMembership(BaseModel):
     team_number: int
 
 
+class TeamWithMembers(BaseModel):
+    id: int
+    game_id: int
+    team_number: int
+    owner: str
+    members: list[str]
+
+
+class LobbyState(BaseModel):
+    teams: list[TeamWithMembers]
+    players: list[str]
+
+
 # Card Models
 
 

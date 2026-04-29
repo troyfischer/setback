@@ -37,6 +37,15 @@ export type TeamRecord = {
   team_number: number;
 };
 
+export type TeamWithMembers = TeamRecord & {
+  members: string[];
+};
+
+export type LobbyState = {
+  teams: TeamWithMembers[];
+  players: string[];
+};
+
 export type TeamMemberRecord = {
   game_id: number;
   player_id: string;

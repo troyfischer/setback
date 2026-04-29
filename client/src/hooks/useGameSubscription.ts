@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { Platform } from 'react-native';
 
 import { createSubscribeToken } from '../lib/api';
 import { normalizeBaseUrl } from '../lib/format';
@@ -17,14 +16,6 @@ type Params = {
 type SubscriptionState = {
   detail: string | null;
   status: 'idle' | 'connecting' | 'live' | 'error';
-};
-
-type ClosableEventSource = {
-  addEventListener?: (type: string, listener: (event: any) => void) => void;
-  close: () => void;
-  onerror?: ((event: Event) => void) | null;
-  onmessage?: ((event: MessageEvent<string>) => void) | null;
-  onopen?: ((event: Event) => void) | null;
 };
 
 export function useGameSubscription({
@@ -53,7 +44,7 @@ export function useGameSubscription({
     }
 
     let cancelled = false;
-    let source: ClosableEventSource | null = null;
+    let source: EventSource | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
     function teardown() {
@@ -61,21 +52,16 @@ export function useGameSubscription({
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
       }
-
       source?.close();
       source = null;
     }
 
     function scheduleReconnect(reason: string) {
-      if (cancelled) {
-        return;
-      }
-
+      if (cancelled) return;
       teardown();
       setStatus('error');
       setDetail(reason);
       onErrorRef.current?.(reason);
-
       reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
         void connect();
@@ -99,70 +85,30 @@ export function useGameSubscription({
 
       try {
         const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
-        const activeGameId = gameId;
-        if (!activeGameId) {
-          return;
-        }
+        if (!gameId) return;
 
-        const token = await createSubscribeToken(
-          normalizedBaseUrl,
-          accessToken,
-          activeGameId,
-        );
-        if (cancelled) {
-          return;
-        }
+        const token = await createSubscribeToken(normalizedBaseUrl, accessToken, gameId);
+        if (cancelled) return;
 
-        const streamUrl = `${normalizedBaseUrl}/game/${activeGameId}/subscribe?sse_token=${encodeURIComponent(token.sse_token)}`;
+        const streamUrl = `${normalizedBaseUrl}/game/${gameId}/subscribe?sse_token=${encodeURIComponent(token.sse_token)}`;
+        const es = new EventSource(streamUrl);
+        source = es;
 
-        if (Platform.OS === 'web' && typeof globalThis.EventSource !== 'undefined') {
-          const webSource = new EventSource(streamUrl);
-          source = webSource;
-
-          webSource.onopen = () => {
-            setStatus('live');
-            setDetail('Stream connected');
-          };
-
-          webSource.onmessage = (event) => {
-            if (event.data) {
-              handlePayload(event.data);
-            }
-          };
-
-          webSource.onerror = () => {
-            scheduleReconnect('The live stream disconnected.');
-          };
-
-          return;
-        }
-
-        const NativeEventSource = require('react-native-sse').default as new (
-          url: string,
-          options?: { pollingInterval?: number },
-        ) => ClosableEventSource;
-        const nativeSource = new NativeEventSource(streamUrl, { pollingInterval: 0 });
-        source = nativeSource;
-
-        nativeSource.addEventListener?.('open', () => {
+        es.onopen = () => {
           setStatus('live');
           setDetail('Stream connected');
-        });
+        };
 
-        nativeSource.addEventListener?.('message', (event) => {
-          if (event.data) {
-            handlePayload(event.data);
-          }
-        });
+        es.onmessage = (event) => {
+          if (event.data) handlePayload(event.data as string);
+        };
 
-        nativeSource.addEventListener?.('error', (event) => {
-          scheduleReconnect(event.message || 'The live stream disconnected.');
-        });
+        es.onerror = () => {
+          scheduleReconnect('The live stream disconnected.');
+        };
       } catch (caught) {
         const message =
-          caught instanceof Error
-            ? caught.message
-            : 'Unable to connect to the live stream.';
+          caught instanceof Error ? caught.message : 'Unable to connect to the live stream.';
         scheduleReconnect(message);
       }
     }

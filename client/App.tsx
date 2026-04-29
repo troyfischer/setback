@@ -18,6 +18,7 @@ import {
   createDevToken,
   createGame,
   createTeam,
+  fetchLobbyState,
   fetchMe,
   joinGame,
   joinTeam,
@@ -37,8 +38,8 @@ import type {
   GameEvent,
   GameRecord,
   GameStatePlayerScoped,
+  LobbyState,
   SetbackCard,
-  TeamRecord,
 } from "./src/types/setback";
 
 const BID_OPTIONS = [0, 2, 3, 4] as const;
@@ -52,7 +53,7 @@ export default function App() {
   const [joinCode, setJoinCode] = useState("");
   const [teamInput, setTeamInput] = useState({ number: "" });
   const [createdGame, setCreatedGame] = useState<GameRecord | null>(null);
-  const [knownTeams, setKnownTeams] = useState<TeamRecord[]>([]);
+  const [lobbyState, setLobbyState] = useState<LobbyState | null>(null);
   const [activeGameId, setActiveGameId] = useState<number | null>(null);
   const [gameState, setGameState] = useState<GameStatePlayerScoped | null>(
     null,
@@ -98,6 +99,29 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!accessToken || !activeGameId || gameState) return;
+
+    const url = normalizeBaseUrl(baseUrl);
+    let cancelled = false;
+
+    async function poll() {
+      try {
+        const state = await fetchLobbyState(url, accessToken, activeGameId!);
+        if (!cancelled) setLobbyState(state);
+      } catch {
+        // silently ignore — stale data is fine in the lobby
+      }
+    }
+
+    void poll();
+    const id = setInterval(() => { void poll(); }, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [accessToken, activeGameId, baseUrl, gameState]);
+
   const subscription = useGameSubscription({
     accessToken,
     baseUrl,
@@ -135,7 +159,7 @@ export default function App() {
 
   function resetLocalGameContext() {
     setCreatedGame(null);
-    setKnownTeams([]);
+    setLobbyState(null);
     setActiveGameId(null);
     setGameState(null);
     setJoinCode("");
@@ -216,7 +240,7 @@ export default function App() {
 
       startTransition(() => {
         setCreatedGame(game);
-        setKnownTeams([]);
+        setLobbyState(null);
         setGameState(null);
         setActiveGameId(game.id);
         setJoinCode(`${game.id}-${game.join_code}`);
@@ -271,11 +295,6 @@ export default function App() {
       });
 
       startTransition(() => {
-        setKnownTeams((current) =>
-          current.some((existing) => existing.id === team.id)
-            ? current
-            : [...current, team],
-        );
         setTeamInput({ number: String(team.team_number) });
       });
 
@@ -427,7 +446,7 @@ export default function App() {
             currentUser={currentUser}
             error={error}
             joinCode={joinCode}
-            knownTeams={knownTeams}
+            lobbyState={lobbyState}
             notice={notice}
             onChangeJoinCode={setJoinCode}
             onChangeTeamId={(value) => setTeamInput((prev) => ({ ...prev, number: value }))}

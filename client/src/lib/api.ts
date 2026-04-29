@@ -5,6 +5,7 @@ import type {
   GameRecord,
   GameRequest,
   GameStatePlayerScoped,
+  LobbyState,
   PlayCardRequest,
   SubscribeTokenResponse,
   TeamMemberRecord,
@@ -135,6 +136,32 @@ export async function joinTeam(
       "Content-Type": "application/json",
     },
     method: "POST",
+  });
+}
+
+export async function leaveTeam(
+  baseUrl: string,
+  token: string,
+  request: UpdateTeamRequest,
+) {
+  return requestJson<TeamMemberRecord>(`${baseUrl}/team/leave`, {
+    body: JSON.stringify(request),
+    headers: {
+      ...withBearer(token),
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+}
+
+export async function fetchLobbyState(
+  baseUrl: string,
+  token: string,
+  gameId: number,
+) {
+  return requestJson<LobbyState>(`${baseUrl}/game/${gameId}/lobby`, {
+    headers: withBearer(token),
+    method: "GET",
   });
 }
 

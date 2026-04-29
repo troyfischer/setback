@@ -1,95 +1,36 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import type { TextStyle, ViewStyle } from 'react-native';
-
 type Tone = 'primary' | 'secondary' | 'ghost';
 
-const toneStyles: Record<Tone, { button: ViewStyle; text: TextStyle }> = {
-  ghost: {
-    button: {
-      backgroundColor: '#f1f5fa',
-      borderColor: '#cbd7e6',
-    },
-    text: {
-      color: '#14304d',
-    },
-  },
-  primary: {
-    button: {
-      backgroundColor: '#b54434',
-      borderColor: '#962a24',
-    },
-    text: {
-      color: '#fffdf9',
-    },
-  },
-  secondary: {
-    button: {
-      backgroundColor: '#173152',
-      borderColor: '#102947',
-    },
-    text: {
-      color: '#f8fbff',
-    },
-  },
+const toneClasses: Record<Tone, string> = {
+  primary: 'bg-[#b54434] border-[#962a24] text-[#fffdf9] hover:bg-[#a03b2d]',
+  secondary: 'bg-[#173152] border-[#102947] text-[#f8fbff] hover:bg-[#1e3d66]',
+  ghost: 'bg-[#f1f5fa] border-[#cbd7e6] text-[#14304d] hover:bg-[#e2eaf5]',
 };
 
 type Props = {
   busy?: boolean;
   disabled?: boolean;
   label: string;
-  onPress: () => void;
+  onClick: () => void;
   tone?: Tone;
 };
 
-export function ActionButton({
-  busy = false,
-  disabled = false,
-  label,
-  onPress,
-  tone = 'primary',
-}: Props) {
+export function ActionButton({ busy = false, disabled = false, label, onClick, tone = 'primary' }: Props) {
   return (
-    <Pressable
+    <button
       disabled={disabled || busy}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.button,
-        toneStyles[tone].button,
-        (disabled || busy) && styles.disabled,
-        pressed && !(disabled || busy) ? styles.pressed : null,
-      ]}
+      onClick={onClick}
+      className={[
+        'inline-flex items-center justify-center gap-2.5 rounded-2xl border px-4 py-3 min-h-[52px]',
+        'text-sm font-extrabold tracking-wide',
+        'transition-all duration-100 active:scale-[0.985] cursor-pointer',
+        'disabled:opacity-55 disabled:cursor-not-allowed',
+        toneClasses[tone],
+      ].join(' ')}
     >
-      <View style={styles.inner}>
-        {busy ? <ActivityIndicator color="#f7d774" size="small" /> : null}
-        <Text style={[styles.text, toneStyles[tone].text]}>{label}</Text>
-      </View>
-    </Pressable>
+      {busy && (
+        <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+      )}
+      {label}
+    </button>
   );
 }
-
-const styles = StyleSheet.create({
-  button: {
-    borderRadius: 16,
-    borderWidth: 1,
-    minHeight: 52,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  inner: {
-    alignItems: 'center',
-    columnGap: 10,
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  text: {
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-  disabled: {
-    opacity: 0.55,
-  },
-  pressed: {
-    transform: [{ scale: 0.985 }],
-  },
-});

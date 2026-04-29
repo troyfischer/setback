@@ -23,10 +23,12 @@ from src.game.models import (
     BidRequest,
     Game,
     GameManagementRequest,
+    LobbyState,
     PlayCardRequest,
     Player,
     Team,
     TeamMember,
+    TeamWithMembers,
 )
 from src.game.manager import GameStatePlayerScoped
 from src.game.scope import scope_state_for_player
@@ -333,6 +335,40 @@ async def game_subscribe(
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
         },
+    )
+
+
+@protected_router.get("/game/{game_id}/lobby")
+def get_lobby_state(
+    ctx: RequestContext,
+    game_id: int,
+    user: Annotated[OAuthUser, Depends(get_current_user)],
+    db: DBSession,
+) -> LobbyState:
+    player = db.get(Player, (user.sub, game_id))
+    if not player:
+        raise HTTPException(403, "not an active player in game")
+
+    teams = db.exec(select(Team).where(Team.game_id == game_id)).all()
+    team_members = db.exec(select(TeamMember).where(TeamMember.game_id == game_id)).all()
+    players = db.exec(select(Player).where(Player.game_id == game_id)).all()
+
+    members_by_team: dict[int, list[str]] = {}
+    for m in team_members:
+        members_by_team.setdefault(m.team_id, []).append(m.player_id)
+
+    return LobbyState(
+        teams=[
+            TeamWithMembers(
+                id=t.id,
+                game_id=t.game_id,
+                team_number=t.team_number,
+                owner=t.owner,
+                members=members_by_team.get(t.id, []),
+            )
+            for t in teams
+        ],
+        players=[p.id for p in players],
     )
 
 

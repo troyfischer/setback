@@ -1,403 +1,331 @@
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { startTransition, useCallback, useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 
-import { ActionButton } from "../components/ActionButton";
-import type { CurrentUser, GameRecord, TeamRecord } from "../types/setback";
+import { ActionButton } from '../components/ActionButton';
+import { useAuth } from '../context/auth';
+import {
+  createGame,
+  createTeam,
+  fetchLobbyState,
+  joinGame,
+  joinTeam,
+  logout,
+  startGame,
+} from '../lib/api';
+import { normalizeBaseUrl } from '../lib/format';
+import type { GameRecord, LobbyState } from '../types/setback';
 
-type Props = {
-    accessToken: string;
-    activeGameId: number | null;
-    busyAction: string | null;
-    createdGame: GameRecord | null;
-    currentUser: CurrentUser | null;
-    error: string | null;
-    joinCode: string;
-    knownTeams: TeamRecord[];
-    notice: string | null;
-    onChangeJoinCode: (value: string) => void;
-    onChangeTeamId: (value: string) => void;
-    onCreateGame: () => void;
-    onCreateTeam: () => void;
-    onJoinGame: () => void;
-    onJoinTeam: () => void;
-    onLeaveTable: () => void;
-    onLogout: () => void;
-    onStartGame: () => void;
-    teamIdInput: string;
-};
+export function LobbyScreen() {
+  const { accessToken, baseUrl, currentUser, setAccessToken, setCurrentUser } = useAuth();
+  const { gameId: gameIdParam } = useParams<{ gameId?: string }>();
+  const navigate = useNavigate();
 
-export function LobbyScreen({
-    accessToken,
-    activeGameId,
-    busyAction,
-    createdGame,
-    currentUser,
-    error,
-    joinCode,
-    knownTeams,
-    notice,
-    onChangeJoinCode,
-    onChangeTeamId,
-    onCreateGame,
-    onCreateTeam,
-    onJoinGame,
-    onJoinTeam,
-    onLeaveTable,
-    onLogout,
-    onStartGame,
-    teamIdInput,
-}: Props) {
-    const inTable = Boolean(activeGameId);
-    const shareCode =
-        createdGame?.join_code && createdGame.id === activeGameId
-            ? `${createdGame.id}-${createdGame.join_code}`
-            : null;
-    const displayName =
-        currentUser?.given_name ||
-        currentUser?.name ||
-        currentUser?.sub ||
-        "player";
+  const activeGameId = gameIdParam ? Number.parseInt(gameIdParam, 10) : null;
 
-    return (
-        <View style={styles.wrapper}>
-            <View style={styles.header}>
-                <View>
-                    <Text style={styles.brand}>Setback</Text>
-                    <Text style={styles.greeting}>Welcome, {displayName}.</Text>
-                </View>
-                <ActionButton
-                    busy={busyAction === "Logout"}
-                    disabled={!accessToken}
-                    label="Sign Out"
-                    onPress={onLogout}
-                    tone="ghost"
+  const [joinCode, setJoinCode] = useState('');
+  const [teamInput, setTeamInput] = useState({ number: '' });
+  const [createdGame, setCreatedGame] = useState<GameRecord | null>(null);
+  const [lobbyState, setLobbyState] = useState<LobbyState | null>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const inTable = Boolean(activeGameId);
+  const shareCode =
+    createdGame?.join_code && createdGame.id === activeGameId
+      ? `${createdGame.id}-${createdGame.join_code}`
+      : null;
+  const displayName =
+    currentUser?.given_name || currentUser?.name || currentUser?.sub || 'player';
+
+  const refreshLobby = useCallback(async () => {
+    if (!accessToken || !activeGameId) return;
+    try {
+      const state = await fetchLobbyState(normalizeBaseUrl(baseUrl), accessToken, activeGameId);
+      setLobbyState(state);
+    } catch {
+      // Silently ignore stale data
+    }
+  }, [accessToken, activeGameId, baseUrl]);
+
+  // Poll lobby state while waiting
+  useEffect(() => {
+    if (!accessToken || !activeGameId) return;
+    void refreshLobby();
+    const id = setInterval(() => { void refreshLobby(); }, 3000);
+    return () => { clearInterval(id); };
+  }, [accessToken, activeGameId, refreshLobby]);
+
+  async function runAction(label: string, action: () => Promise<void>) {
+    setBusyAction(label);
+    setError(null);
+    setNotice(null);
+    try {
+      await action();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unknown error');
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleLogout() {
+    await runAction('Logout', async () => {
+      const url = normalizeBaseUrl(baseUrl);
+      try { await logout(url, accessToken); } catch { /* ignore */ }
+      startTransition(() => {
+        setAccessToken('');
+        setCurrentUser(null);
+      });
+      navigate('/');
+    });
+  }
+
+  async function handleCreateGame() {
+    await runAction('Create game', async () => {
+      const url = normalizeBaseUrl(baseUrl);
+      const game = await createGame(url, accessToken);
+      await joinGame(url, accessToken, { game_id: game.id, secret: game.join_code });
+      startTransition(() => { setCreatedGame(game); });
+      setNotice(`Created table #${game.id}. Share the join code with your players.`);
+      navigate(`/lobby/${game.id}`);
+    });
+  }
+
+  async function handleJoinGame() {
+    await runAction('Join game', async () => {
+      const url = normalizeBaseUrl(baseUrl);
+      const trimmed = joinCode.trim();
+      const sep = trimmed.indexOf('-');
+      if (sep === -1) throw new Error('Invalid join code. Paste the full code your host shared.');
+      const gameId = Number.parseInt(trimmed.slice(0, sep), 10);
+      const secret = trimmed.slice(sep + 1);
+      if (!Number.isInteger(gameId) || !secret) throw new Error('Invalid join code. Paste the full code your host shared.');
+      await joinGame(url, accessToken, { game_id: gameId, secret });
+      setNotice(`Joined table #${gameId}.`);
+      navigate(`/lobby/${gameId}`);
+    });
+  }
+
+  async function handleCreateTeam() {
+    await runAction('Create team', async () => {
+      if (!activeGameId) throw new Error('Join a game before creating a team.');
+      const team = await createTeam(normalizeBaseUrl(baseUrl), accessToken, { game_id: activeGameId });
+      startTransition(() => { setTeamInput({ number: String(team.team_number) }); });
+      setNotice(`Created team ${team.team_number}.`);
+      await refreshLobby();
+    });
+  }
+
+  async function handleJoinTeam() {
+    await runAction('Join team', async () => {
+      if (!activeGameId) throw new Error('Join a game before joining a team.');
+      const teamNumber = Number.parseInt(teamInput.number, 10);
+      if (!Number.isInteger(teamNumber)) throw new Error('Enter a numeric team number.');
+      await joinTeam(normalizeBaseUrl(baseUrl), accessToken, { game_id: activeGameId, team_number: teamNumber });
+      setNotice(`Joined team ${teamNumber}.`);
+      await refreshLobby();
+    });
+  }
+
+  async function handleStartGame() {
+    await runAction('Start game', async () => {
+      if (!activeGameId) throw new Error('Create or join a game first.');
+      await startGame(normalizeBaseUrl(baseUrl), accessToken, { game_id: activeGameId });
+      navigate(`/game/${activeGameId}`);
+    });
+  }
+
+  function handleLeaveTable() {
+    navigate('/lobby');
+    setNotice('Left the table.');
+  }
+
+  return (
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 px-5 py-10">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-3xl font-black tracking-tight text-white">Setback</h1>
+          <p className="text-sm text-[#d2deee] mt-0.5">Welcome, {displayName}.</p>
+        </div>
+        <ActionButton
+          busy={busyAction === 'Logout'}
+          label="Sign Out"
+          onClick={() => { void handleLogout(); }}
+          tone="ghost"
+        />
+      </div>
+
+      {error && (
+        <div className="rounded-2xl bg-[rgba(150,45,36,0.94)] px-4 py-3">
+          <p className="text-sm font-semibold text-white">{error}</p>
+        </div>
+      )}
+      {notice && !error && (
+        <div className="rounded-2xl bg-[rgba(31,134,99,0.92)] px-4 py-3">
+          <p className="text-sm font-semibold text-white">{notice}</p>
+        </div>
+      )}
+
+      {!inTable ? (
+        <>
+          {/* Host */}
+          <div className="rounded-3xl bg-[#fffaf2] p-6 shadow-xl flex flex-col gap-4">
+            <div>
+              <span className="text-[10px] font-extrabold uppercase tracking-[1.6px] text-[#b54434]">Host</span>
+              <h2 className="text-xl font-extrabold text-[#102947] mt-0.5">Start a new table</h2>
+              <p className="mt-1 text-sm text-[#4e647f] leading-relaxed">
+                Create a table and share the join code so the other three seats can fill.
+              </p>
+            </div>
+            <ActionButton
+              busy={busyAction === 'Create game'}
+              label="Create Game"
+              onClick={() => { void handleCreateGame(); }}
+            />
+          </div>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-[rgba(247,215,116,0.28)]" />
+            <span className="text-xs font-bold uppercase tracking-wider text-[#d2deee]">or</span>
+            <div className="h-px flex-1 bg-[rgba(247,215,116,0.28)]" />
+          </div>
+
+          {/* Join */}
+          <div className="rounded-3xl bg-[#fffaf2] p-6 shadow-xl flex flex-col gap-4">
+            <div>
+              <span className="text-[10px] font-extrabold uppercase tracking-[1.6px] text-[#b54434]">Guest</span>
+              <h2 className="text-xl font-extrabold text-[#102947] mt-0.5">Join a table</h2>
+              <p className="mt-1 text-sm text-[#4e647f] leading-relaxed">
+                Paste the join code your host shared.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold uppercase tracking-wide text-[#0d1d31]">Join code</label>
+              <input
+                type="text"
+                autoComplete="off"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value)}
+                placeholder="42-abc123xyz"
+                className="rounded-2xl border border-[#bfd1e7] bg-[#edf3fa] px-4 py-3 text-base text-[#0d1d31] placeholder-[#8ca3bf] outline-none focus:border-[#102947] focus:ring-2 focus:ring-[#102947]/20 transition"
+              />
+            </div>
+            <ActionButton
+              busy={busyAction === 'Join game'}
+              label="Join Game"
+              onClick={() => { void handleJoinGame(); }}
+              tone="secondary"
+            />
+          </div>
+        </>
+      ) : (
+        <div className="rounded-3xl bg-[#fffaf2] p-6 shadow-xl flex flex-col gap-5">
+          <div>
+            <span className="text-[10px] font-extrabold uppercase tracking-[1.6px] text-[#b54434]">Table</span>
+            <h2 className="text-2xl font-extrabold text-[#102947] mt-0.5">Game #{activeGameId}</h2>
+            <p className="mt-1 text-sm text-[#4e647f] leading-relaxed">
+              Set up teams, then start the game when everyone is seated.
+            </p>
+          </div>
+
+          {shareCode && (
+            <div className="rounded-2xl bg-[#102947] px-5 py-4">
+              <p className="text-[10px] font-bold uppercase tracking-[1.4px] text-[#f7d774]">Share this join code</p>
+              <p className="mt-1 font-mono text-2xl font-extrabold text-white tracking-wide">{shareCode}</p>
+            </div>
+          )}
+
+          {/* Teams section */}
+          <div className="rounded-2xl bg-[#eff4fa] p-4 flex flex-col gap-4">
+            <div>
+              <h3 className="text-base font-extrabold text-[#102947]">Teams</h3>
+              <p className="mt-0.5 text-xs text-[#4e647f] leading-relaxed">
+                Create a team, then have your partner join with the same number.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3 items-end">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold uppercase tracking-wide text-[#0d1d31]">Team number</label>
+                <input
+                  type="number"
+                  value={teamInput.number}
+                  onChange={(e) => setTeamInput({ number: e.target.value })}
+                  placeholder="1"
+                  className="w-28 rounded-xl border border-[#bfd1e7] bg-white px-3 py-2.5 text-base text-[#0d1d31] placeholder-[#8ca3bf] outline-none focus:border-[#102947] focus:ring-2 focus:ring-[#102947]/20 transition"
                 />
-            </View>
+              </div>
+              <div className="flex gap-2 pb-0.5">
+                <ActionButton
+                  busy={busyAction === 'Create team'}
+                  label="Create Team"
+                  onClick={() => { void handleCreateTeam(); }}
+                  tone="secondary"
+                />
+                <ActionButton
+                  busy={busyAction === 'Join team'}
+                  label="Join Team"
+                  onClick={() => { void handleJoinTeam(); }}
+                  tone="ghost"
+                />
+              </div>
+            </div>
 
-            {error ? (
-                <View style={[styles.banner, styles.errorBanner]}>
-                    <Text style={styles.bannerText}>{error}</Text>
-                </View>
-            ) : null}
-            {notice && !error ? (
-                <View style={[styles.banner, styles.noticeBanner]}>
-                    <Text style={styles.bannerText}>{notice}</Text>
-                </View>
-            ) : null}
-
-            {!inTable ? (
-                <>
-                    <View style={styles.card}>
-                        <Text style={styles.cardEyebrow}>Host</Text>
-                        <Text style={styles.cardTitle}>Start a new table</Text>
-                        <Text style={styles.cardBody}>
-                            Create a table and share the join code so the other
-                            three seats can fill.
-                        </Text>
-                        <ActionButton
-                            busy={busyAction === "Create game"}
-                            label="Create Game"
-                            onPress={onCreateGame}
-                        />
-                    </View>
-
-                    <View style={styles.divider}>
-                        <View style={styles.dividerLine} />
-                        <Text style={styles.dividerText}>or</Text>
-                        <View style={styles.dividerLine} />
-                    </View>
-
-                    <View style={styles.card}>
-                        <Text style={styles.cardEyebrow}>Guest</Text>
-                        <Text style={styles.cardTitle}>Join a table</Text>
-                        <Text style={styles.cardBody}>
-                            Enter the join code your host shared.
-                        </Text>
-
-                        <View style={styles.flexField}>
-                            <Text style={styles.label}>Join code</Text>
-                            <TextInput
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                                onChangeText={onChangeJoinCode}
-                                placeholder="42-abc123xyz"
-                                placeholderTextColor="#8ca3bf"
-                                style={styles.input}
-                                value={joinCode}
-                            />
-                        </View>
-                        <ActionButton
-                            busy={busyAction === "Join game"}
-                            label="Join Game"
-                            onPress={onJoinGame}
-                            tone="secondary"
-                        />
-                    </View>
-                </>
-            ) : (
-                <View style={styles.card}>
-                    <Text style={styles.cardEyebrow}>Table</Text>
-                    <Text style={styles.cardTitle}>Game #{activeGameId}</Text>
-                    <Text style={styles.cardBody}>
-                        Set up teams, then start the game when everyone is
-                        seated.
-                    </Text>
-
-                    {shareCode ? (
-                        <View style={styles.codeBox}>
-                            <Text style={styles.codeLabel}>
-                                Share this join code
-                            </Text>
-                            <Text style={styles.codeValue}>{shareCode}</Text>
-                        </View>
-                    ) : null}
-
-                    <View style={styles.teamSection}>
-                        <Text style={styles.sectionTitle}>Teams</Text>
-                        <Text style={styles.sectionBody}>
-                            Create a team, then have your partner join it with
-                            the same number.
-                        </Text>
-
-                        <View style={styles.formRow}>
-                            <View style={styles.flexField}>
-                                <Text style={styles.label}>Team number</Text>
-                                <TextInput
-                                    keyboardType="numeric"
-                                    onChangeText={onChangeTeamId}
-                                    placeholder="1"
-                                    placeholderTextColor="#8ca3bf"
-                                    style={styles.input}
-                                    value={teamIdInput}
-                                />
-                            </View>
-                            <View style={styles.teamButtons}>
-                                <ActionButton
-                                    busy={busyAction === "Create team"}
-                                    label="Create Team"
-                                    onPress={onCreateTeam}
-                                    tone="secondary"
-                                />
-                                <ActionButton
-                                    busy={busyAction === "Join team"}
-                                    label="Join Team"
-                                    onPress={onJoinTeam}
-                                    tone="ghost"
-                                />
-                            </View>
-                        </View>
-
-                        {knownTeams.length > 0 ? (
-                            <View style={styles.teamList}>
-                                {knownTeams.map((team) => (
-                                    <View
-                                        key={team.id}
-                                        style={styles.teamBadge}
-                                    >
-                                        <Text style={styles.teamBadgeText}>
-                                            Team {team.team_number}
-                                        </Text>
-                                    </View>
-                                ))}
-                            </View>
-                        ) : null}
-                    </View>
-
-                    <View style={styles.actionRow}>
-                        <ActionButton
-                            busy={busyAction === "Start game"}
-                            label="Start Game"
-                            onPress={onStartGame}
-                        />
-                        <ActionButton
-                            label="Leave Table"
-                            onPress={onLeaveTable}
-                            tone="ghost"
-                        />
-                    </View>
-                </View>
+            {lobbyState && lobbyState.teams.length > 0 && (
+              <div className="grid grid-cols-2 gap-3">
+                {lobbyState.teams.map((team) => (
+                  <div key={team.id} className="overflow-hidden rounded-2xl shadow-sm">
+                    <div className="flex items-center justify-between bg-[#102947] px-4 py-2.5">
+                      <span className="text-sm font-extrabold text-white">Team {team.team_number}</span>
+                      <span className="text-xs font-semibold text-[#9fb6d4]">{team.members.length}/2</span>
+                    </div>
+                    <div className="divide-y divide-[#e8f0f8] bg-white">
+                      {[0, 1].map((slot) => {
+                        const member = team.members[slot];
+                        return member ? (
+                          <div key={slot} className="flex items-center gap-3 px-4 py-2.5">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#c7d9f0] text-sm font-extrabold text-[#102947]">
+                              {member[0]!.toUpperCase()}
+                            </div>
+                            <span className="truncate text-sm font-semibold text-[#102947]">{member}</span>
+                          </div>
+                        ) : (
+                          <div key={slot} className="flex items-center gap-3 px-4 py-2.5">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-[#bfd1e7]" />
+                            <span className="text-sm italic text-[#b0c4d8]">Open seat</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
-        </View>
-    );
-}
 
-const styles = StyleSheet.create({
-    actionRow: {
-        columnGap: 10,
-        flexDirection: "row",
-        flexWrap: "wrap",
-        rowGap: 10,
-    },
-    banner: {
-        borderRadius: 14,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-    },
-    bannerText: {
-        color: "#fdfefe",
-        fontSize: 14,
-        fontWeight: "600",
-    },
-    brand: {
-        color: "#f8fbff",
-        fontSize: 26,
-        fontWeight: "900",
-        letterSpacing: 0.5,
-    },
-    card: {
-        backgroundColor: "#fffaf2",
-        borderRadius: 28,
-        padding: 22,
-        rowGap: 12,
-        shadowColor: "#081120",
-        shadowOffset: { height: 10, width: 0 },
-        shadowOpacity: 0.18,
-        shadowRadius: 24,
-    },
-    cardBody: {
-        color: "#4e647f",
-        fontSize: 14,
-        lineHeight: 20,
-    },
-    cardEyebrow: {
-        color: "#b54434",
-        fontSize: 11,
-        fontWeight: "800",
-        letterSpacing: 1.6,
-        textTransform: "uppercase",
-    },
-    cardTitle: {
-        color: "#102947",
-        fontSize: 22,
-        fontWeight: "800",
-    },
-    codeBox: {
-        backgroundColor: "#102947",
-        borderRadius: 18,
-        padding: 18,
-        rowGap: 4,
-    },
-    codeLabel: {
-        color: "#f7d774",
-        fontSize: 11,
-        fontWeight: "700",
-        letterSpacing: 1.4,
-        textTransform: "uppercase",
-    },
-    codeValue: {
-        color: "#f8fbff",
-        fontFamily: "Menlo",
-        fontSize: 22,
-        fontWeight: "800",
-    },
-    divider: {
-        alignItems: "center",
-        columnGap: 12,
-        flexDirection: "row",
-    },
-    dividerLine: {
-        backgroundColor: "rgba(247, 215, 116, 0.28)",
-        flexGrow: 1,
-        height: 1,
-    },
-    dividerText: {
-        color: "#d2deee",
-        fontSize: 12,
-        fontWeight: "700",
-        letterSpacing: 1.2,
-        textTransform: "uppercase",
-    },
-    errorBanner: {
-        backgroundColor: "rgba(150, 45, 36, 0.94)",
-    },
-    flexField: {
-        flexGrow: 1,
-        flexShrink: 1,
-        minWidth: 180,
-    },
-    formRow: {
-        columnGap: 12,
-        flexDirection: "row",
-        flexWrap: "wrap",
-        rowGap: 12,
-    },
-    greeting: {
-        color: "#d2deee",
-        fontSize: 14,
-        marginTop: 2,
-    },
-    header: {
-        alignItems: "center",
-        flexDirection: "row",
-        flexWrap: "wrap",
-        gap: 12,
-        justifyContent: "space-between",
-    },
-    input: {
-        backgroundColor: "#edf3fa",
-        borderColor: "#bfd1e7",
-        borderRadius: 14,
-        borderWidth: 1,
-        color: "#0d1d31",
-        fontSize: 16,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-    },
-    label: {
-        color: "#0d1d31",
-        fontSize: 12,
-        fontWeight: "700",
-        letterSpacing: 0.4,
-        marginBottom: 6,
-        textTransform: "uppercase",
-    },
-    noticeBanner: {
-        backgroundColor: "rgba(31, 134, 99, 0.92)",
-    },
-    sectionBody: {
-        color: "#4e647f",
-        fontSize: 13,
-        lineHeight: 18,
-    },
-    sectionTitle: {
-        color: "#102947",
-        fontSize: 16,
-        fontWeight: "800",
-    },
-    teamBadge: {
-        backgroundColor: "#f1d7a1",
-        borderRadius: 999,
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-    },
-    teamBadgeText: {
-        color: "#5b2f16",
-        fontSize: 13,
-        fontWeight: "700",
-    },
-    teamButtons: {
-        alignItems: "flex-start",
-        columnGap: 10,
-        flexDirection: "row",
-        flexWrap: "wrap",
-        paddingTop: 24,
-        rowGap: 8,
-    },
-    teamList: {
-        columnGap: 10,
-        flexDirection: "row",
-        flexWrap: "wrap",
-        rowGap: 10,
-    },
-    teamSection: {
-        backgroundColor: "#eff4fa",
-        borderRadius: 18,
-        padding: 16,
-        rowGap: 10,
-    },
-    wrapper: {
-        alignSelf: "center",
-        maxWidth: 640,
-        rowGap: 16,
-        width: "100%",
-    },
-});
+            {lobbyState && lobbyState.players.length > 0 && (
+              <p className="text-xs text-[#5c7593]">
+                <span className="font-bold">{lobbyState.players.length}</span> player{lobbyState.players.length !== 1 ? 's' : ''} in the game
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <ActionButton
+              busy={busyAction === 'Start game'}
+              label="Start Game"
+              onClick={() => { void handleStartGame(); }}
+            />
+            <ActionButton
+              label="Leave Table"
+              onClick={handleLeaveTable}
+              tone="ghost"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
