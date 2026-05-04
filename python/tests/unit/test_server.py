@@ -16,7 +16,7 @@ import src.game.routes.game as game_routes
 from src.auth import routes as auth_routes
 from src.auth.sso.models import OAuthUser
 from src.game.events import GameEvent
-from src.game.manager import GameStatePlayerScoped
+from src.game.manager import GameStatePlayerScoped, Phase
 from src.game.models import Game, Team
 from src.game.sse import ConnectionManager
 from src.main import app
@@ -27,6 +27,7 @@ from tests.helpers import (
     do_bidding,
     join_game,
     play_full_game,
+    play_full_round,
     play_trick,
     start_game,
 )
@@ -138,8 +139,14 @@ def game_after_bid(
     return do_bidding(client, authenticated_users, started_game)
 
 
-def test_bid_game(game_after_bid: GameStatePlayerScoped):
-    print(game_after_bid)
+def test_bid_game(
+    client: TestClient,
+    authenticated_users: dict[str, str],
+    started_game: GameStatePlayerScoped,
+):
+    gs = do_bidding(client, authenticated_users, started_game)
+    assert gs.active_round.bid.collection
+    assert gs.phase == Phase.PLAY
 
 
 def test_play_single_trick(
@@ -147,24 +154,34 @@ def test_play_single_trick(
     authenticated_users: dict[str, str],
     game_after_bid: GameStatePlayerScoped,
 ):
-    game_state = game_after_bid
-    print(game_state.order)
-
-    game_state = play_trick(client, authenticated_users, game_state)
-    print(
-        game_state.active_round.active_trick.collection, game_state.active_round.trump
-    )
+    gs = play_trick(client, authenticated_users, game_after_bid)
+    assert gs.phase == Phase.PLAY
 
 
-def test_play_single_round(
+def test_play_full_round(
     client: TestClient,
     authenticated_users: dict[str, str],
-    game_after_bid: GameStatePlayerScoped,
+    started_game: GameStatePlayerScoped,
 ):
-    game_state, tricks_played = play_full_game(
-        client, authenticated_users, game_after_bid
-    )
-    print(f"Completed game with {tricks_played} tricks")
+    """
+    A round starts in the bid phase, progress to play phase and ends back in the
+    bid phase.
+
+    NOTE: A low game state max_score value could break this test by moving the
+    game to completed stage rather than back to bid
+    """
+
+    game_state, _ = play_full_round(client, authenticated_users, started_game)
+    assert game_state.phase == Phase.BID
+
+
+def test_play_full_game(
+    client: TestClient,
+    authenticated_users: dict[str, str],
+    started_game: GameStatePlayerScoped,
+):
+    game_state, _ = play_full_game(client, authenticated_users, started_game)
+    assert game_state.phase == Phase.COMPLETE
 
 
 def test_oauth_unknown_provider_returns_404(client: TestClient):

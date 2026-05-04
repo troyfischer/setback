@@ -4,7 +4,7 @@ from typing import Protocol
 
 from httpx import Response
 
-from src.game.manager import GameStatePlayerScoped, Phase
+from src.game.manager import Dealer, GameStatePlayerScoped, Phase
 from src.game.models import (
     BidRequest,
     Game,
@@ -176,18 +176,36 @@ def play_trick(
     return game_state
 
 
+def play_full_round(
+    client: HTTPClient,
+    authenticated_users: dict[str, str],
+    game_state: GameStatePlayerScoped,
+) -> tuple[GameStatePlayerScoped, int]:
+    assert game_state.phase == Phase.BID, "round must start in bid phase"
+    game_state = do_bidding(client, authenticated_users, game_state)
+
+    tricks_played = 0
+    max_tricks = Dealer.CARDS_PER_HAND
+    while game_state.phase != Phase.BID:
+        assert tricks_played < max_tricks, f"Round stalled after {tricks_played} tricks"
+        game_state = play_trick(client, authenticated_users, game_state)
+        tricks_played += 1
+
+    return game_state, tricks_played
+
+
 def play_full_game(
     client: HTTPClient,
     authenticated_users: dict[str, str],
     game_state: GameStatePlayerScoped,
 ) -> tuple[GameStatePlayerScoped, int]:
     tricks_played = 0
-
+    max_tricks = game_state.max_score * Dealer.CARDS_PER_HAND
     while game_state.phase != Phase.COMPLETE:
-        if game_state.phase == Phase.BID:
-            game_state = do_bidding(client, authenticated_users, game_state)
-
-        game_state = play_trick(client, authenticated_users, game_state)
-        tricks_played += 1
+        assert tricks_played < max_tricks, f"Game stalled after {tricks_played} tricks"
+        game_state, trick_count = play_full_round(
+            client, authenticated_users, game_state
+        )
+        tricks_played += trick_count
 
     return game_state, tricks_played

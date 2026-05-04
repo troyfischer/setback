@@ -188,7 +188,7 @@ def test_play_single_trick(
     log.info("✓ completed one trick")
 
 
-def test_play_full_round(client: httpx.Client, authenticated_users: dict[str, str]):
+def test_play_full_game(client: httpx.Client, authenticated_users: dict[str, str]):
     fresh_game = create_game(client, authenticated_users[USERS[0]])
     join_game(client, authenticated_users, fresh_game, USERS)
     create_and_join_teams(client, authenticated_users, fresh_game, USERS)

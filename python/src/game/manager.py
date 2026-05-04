@@ -446,9 +446,6 @@ class GameState(_GameState):
     def process_bid(self, bid: Bid) -> None:
         self.active_round.bid.append(bid)
 
-        if self.active_round.bid.is_complete:
-            self.next_phase()
-
     def process_card(self, card: SetbackCard, player_id: str) -> None:
         self.active_round.ensure_trump(card.suit)
 
@@ -678,6 +675,8 @@ class GameManager:
         with self._game_state_context(game, Phase.BID, player.id) as gs:
             gs.process_bid(Bid(amount=bid.amount, player_id=player.id))
             self._publish_event("bid_placed", gs)
+            if gs.active_round.bid.is_complete:
+                gs.next_phase()
         return gs
 
     def play_card(self, game: Game, player: Player, card: SetbackCard) -> GameState:
