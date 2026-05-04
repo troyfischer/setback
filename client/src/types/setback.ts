@@ -42,6 +42,7 @@ export type TeamWithMembers = TeamRecord & {
 };
 
 export type LobbyState = {
+  game_owner: string;
   teams: TeamWithMembers[];
   players: string[];
 };

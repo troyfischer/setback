@@ -19,6 +19,7 @@ from src.auth.utils import get_current_user
 from src.db import DBSession
 from src.game.constants import Routes
 from src.game.exceptions import InvalidGameStateException
+from src.game.manager import GameStatePlayerScoped
 from src.game.models import (
     BidRequest,
     Game,
@@ -30,7 +31,6 @@ from src.game.models import (
     TeamMember,
     TeamWithMembers,
 )
-from src.game.manager import GameStatePlayerScoped
 from src.game.scope import scope_state_for_player
 from src.game.sse import ConnectionManager
 from src.game.utils import get_game, get_player_in_game, get_team
@@ -85,7 +85,7 @@ protected_router = APIRouter(
 
 
 @protected_router.post(Routes.Game.CREATE)
-async def create(request: Request, db: DBSession):
+async def create_game(request: Request, db: DBSession):
     user = cast(OAuthUser, request.state.user)
 
     game = Game(owner=user.sub)
@@ -97,7 +97,7 @@ async def create(request: Request, db: DBSession):
 
 
 @protected_router.post(Routes.Game.DELETE)
-async def delete(
+async def delete_game(
     user: Annotated[OAuthUser, Depends(get_current_user)],
     db: DBSession,
     game: Annotated[Game, Depends(get_game)],
@@ -218,15 +218,16 @@ async def delete_team(
     user: Annotated[OAuthUser, Depends(get_current_user)],
     game: Annotated[Game, Depends(get_game)],
     player: Annotated[Player, Depends(get_player_in_game)],
+    team: Annotated[Team, Depends(get_team)],
 ):
-    team = db.exec(
-        select(Team).where((Team.game_id == game.id) & (Team.owner == player.id))
-    ).first()
-    if not team or team.owner != user.sub:
-        raise HTTPException(400, "team does not exist")
-    if team.owner != user.sub:
-        raise HTTPException(403, "owner must delete team")
+    is_game_owner = game.owner == user.sub
+    if not is_game_owner and team.owner != user.sub:
+        raise HTTPException(403, "only the team owner or game admin can delete a team")
 
+    for member in db.exec(
+        select(TeamMember).where(TeamMember.team_id == team.id)
+    ).all():
+        db.delete(member)
     db.delete(team)
     db.commit()
 
@@ -349,8 +350,14 @@ def get_lobby_state(
     if not player:
         raise HTTPException(403, "not an active player in game")
 
+    game = db.get(Game, game_id)
+    if not game:
+        raise HTTPException(404, "game not found")
+
     teams = db.exec(select(Team).where(Team.game_id == game_id)).all()
-    team_members = db.exec(select(TeamMember).where(TeamMember.game_id == game_id)).all()
+    team_members = db.exec(
+        select(TeamMember).where(TeamMember.game_id == game_id)
+    ).all()
     players = db.exec(select(Player).where(Player.game_id == game_id)).all()
 
     members_by_team: dict[int, list[str]] = {}
@@ -358,6 +365,7 @@ def get_lobby_state(
         members_by_team.setdefault(m.team_id, []).append(m.player_id)
 
     return LobbyState(
+        game_owner=game.owner,
         teams=[
             TeamWithMembers(
                 id=t.id,

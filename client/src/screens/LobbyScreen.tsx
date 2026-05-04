@@ -6,9 +6,11 @@ import { useAuth } from '../context/auth';
 import {
   createGame,
   createTeam,
+  deleteTeam,
   fetchLobbyState,
   joinGame,
   joinTeam,
+  leaveTeam,
   logout,
   startGame,
 } from '../lib/api';
@@ -23,7 +25,6 @@ export function LobbyScreen() {
   const activeGameId = gameIdParam ? Number.parseInt(gameIdParam, 10) : null;
 
   const [joinCode, setJoinCode] = useState('');
-  const [teamInput, setTeamInput] = useState({ number: '' });
   const [createdGame, setCreatedGame] = useState<GameRecord | null>(null);
   const [lobbyState, setLobbyState] = useState<LobbyState | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -111,19 +112,34 @@ export function LobbyScreen() {
     await runAction('Create team', async () => {
       if (!activeGameId) throw new Error('Join a game before creating a team.');
       const team = await createTeam(normalizeBaseUrl(baseUrl), accessToken, { game_id: activeGameId });
-      startTransition(() => { setTeamInput({ number: String(team.team_number) }); });
       setNotice(`Created team ${team.team_number}.`);
       await refreshLobby();
     });
   }
 
-  async function handleJoinTeam() {
-    await runAction('Join team', async () => {
+  async function handleJoinTeam(teamNumber: number) {
+    await runAction(`Join team ${teamNumber}`, async () => {
       if (!activeGameId) throw new Error('Join a game before joining a team.');
-      const teamNumber = Number.parseInt(teamInput.number, 10);
-      if (!Number.isInteger(teamNumber)) throw new Error('Enter a numeric team number.');
       await joinTeam(normalizeBaseUrl(baseUrl), accessToken, { game_id: activeGameId, team_number: teamNumber });
       setNotice(`Joined team ${teamNumber}.`);
+      await refreshLobby();
+    });
+  }
+
+  async function handleLeaveTeam(teamNumber: number) {
+    await runAction('Leave team', async () => {
+      if (!activeGameId) throw new Error('Not in a game.');
+      await leaveTeam(normalizeBaseUrl(baseUrl), accessToken, { game_id: activeGameId, team_number: teamNumber });
+      setNotice(`Left team ${teamNumber}.`);
+      await refreshLobby();
+    });
+  }
+
+  async function handleDeleteTeam(teamNumber: number) {
+    await runAction(`Delete team ${teamNumber}`, async () => {
+      if (!activeGameId) throw new Error('Not in a game.');
+      await deleteTeam(normalizeBaseUrl(baseUrl), accessToken, { game_id: activeGameId, team_number: teamNumber });
+      setNotice(`Deleted team ${teamNumber}.`);
       await refreshLobby();
     });
   }
@@ -243,73 +259,90 @@ export function LobbyScreen() {
             <div>
               <h3 className="text-base font-extrabold text-[#102947]">Teams</h3>
               <p className="mt-0.5 text-xs text-[#4e647f] leading-relaxed">
-                Create a team, then have your partner join with the same number.
+                Join an open team or create a new one for you and a partner.
               </p>
-            </div>
-
-            <div className="flex flex-wrap gap-3 items-end">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold uppercase tracking-wide text-[#0d1d31]">Team number</label>
-                <input
-                  type="number"
-                  value={teamInput.number}
-                  onChange={(e) => setTeamInput({ number: e.target.value })}
-                  placeholder="1"
-                  className="w-28 rounded-xl border border-[#bfd1e7] bg-white px-3 py-2.5 text-base text-[#0d1d31] placeholder-[#8ca3bf] outline-none focus:border-[#102947] focus:ring-2 focus:ring-[#102947]/20 transition"
-                />
-              </div>
-              <div className="flex gap-2 pb-0.5">
-                <ActionButton
-                  busy={busyAction === 'Create team'}
-                  label="Create Team"
-                  onClick={() => { void handleCreateTeam(); }}
-                  tone="secondary"
-                />
-                <ActionButton
-                  busy={busyAction === 'Join team'}
-                  label="Join Team"
-                  onClick={() => { void handleJoinTeam(); }}
-                  tone="ghost"
-                />
-              </div>
             </div>
 
             {lobbyState && lobbyState.teams.length > 0 && (
               <div className="grid grid-cols-2 gap-3">
-                {lobbyState.teams.map((team) => (
-                  <div key={team.id} className="overflow-hidden rounded-2xl shadow-sm">
-                    <div className="flex items-center justify-between bg-[#102947] px-4 py-2.5">
-                      <span className="text-sm font-extrabold text-white">Team {team.team_number}</span>
-                      <span className="text-xs font-semibold text-[#9fb6d4]">{team.members.length}/2</span>
-                    </div>
-                    <div className="divide-y divide-[#e8f0f8] bg-white">
-                      {[0, 1].map((slot) => {
-                        const member = team.members[slot];
-                        return member ? (
-                          <div key={slot} className="flex items-center gap-3 px-4 py-2.5">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#c7d9f0] text-sm font-extrabold text-[#102947]">
-                              {member[0]!.toUpperCase()}
+                {lobbyState.teams.map((team) => {
+                  const isMember = currentUser && team.members.includes(currentUser.sub);
+                  const isFull = team.members.length >= 2;
+                  const isGameOwner = currentUser && lobbyState.game_owner === currentUser.sub;
+                  return (
+                    <div key={team.id} className="overflow-hidden rounded-2xl shadow-sm">
+                      <div className="flex items-center justify-between bg-[#102947] px-4 py-2.5">
+                        <span className="text-sm font-extrabold text-white">Team {team.team_number}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-[#9fb6d4]">{team.members.length}/2</span>
+                          {isMember ? (
+                            <button
+                              type="button"
+                              onClick={() => { void handleLeaveTeam(team.team_number); }}
+                              disabled={busyAction === 'Leave team'}
+                              className="text-[10px] font-bold uppercase tracking-wide text-[#f7d774] hover:text-white transition-colors disabled:opacity-50"
+                            >
+                              Leave
+                            </button>
+                          ) : !isFull && (
+                            <button
+                              type="button"
+                              onClick={() => { void handleJoinTeam(team.team_number); }}
+                              disabled={busyAction === `Join team ${team.team_number}`}
+                              className="text-[10px] font-bold uppercase tracking-wide text-[#f7d774] hover:text-white transition-colors disabled:opacity-50"
+                            >
+                              Join
+                            </button>
+                          )}
+                          {isGameOwner && (
+                            <button
+                              type="button"
+                              onClick={() => { void handleDeleteTeam(team.team_number); }}
+                              disabled={busyAction === `Delete team ${team.team_number}`}
+                              className="text-[10px] font-bold uppercase tracking-wide text-red-400 hover:text-red-300 transition-colors disabled:opacity-50"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="divide-y divide-[#e8f0f8] bg-white">
+                        {[0, 1].map((slot) => {
+                          const member = team.members[slot];
+                          return member ? (
+                            <div key={slot} className="flex items-center gap-3 px-4 py-2.5">
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#c7d9f0] text-sm font-extrabold text-[#102947]">
+                                {member[0]!.toUpperCase()}
+                              </div>
+                              <span className="truncate text-sm font-semibold text-[#102947]">{member}</span>
                             </div>
-                            <span className="truncate text-sm font-semibold text-[#102947]">{member}</span>
-                          </div>
-                        ) : (
-                          <div key={slot} className="flex items-center gap-3 px-4 py-2.5">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-[#bfd1e7]" />
-                            <span className="text-sm italic text-[#b0c4d8]">Open seat</span>
-                          </div>
-                        );
-                      })}
+                          ) : (
+                            <div key={slot} className="flex items-center gap-3 px-4 py-2.5">
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-[#bfd1e7]" />
+                              <span className="text-sm italic text-[#b0c4d8]">Open seat</span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
-            {lobbyState && lobbyState.players.length > 0 && (
-              <p className="text-xs text-[#5c7593]">
-                <span className="font-bold">{lobbyState.players.length}</span> player{lobbyState.players.length !== 1 ? 's' : ''} in the game
-              </p>
-            )}
+            <div className="flex items-center justify-between">
+              <ActionButton
+                busy={busyAction === 'Create team'}
+                label="+ New Team"
+                onClick={() => { void handleCreateTeam(); }}
+                tone="secondary"
+              />
+              {lobbyState && lobbyState.players.length > 0 && (
+                <p className="text-xs text-[#5c7593]">
+                  <span className="font-bold">{lobbyState.players.length}</span> player{lobbyState.players.length !== 1 ? 's' : ''} in the game
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-3">

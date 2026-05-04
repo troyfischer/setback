@@ -101,6 +101,7 @@ class TeamWithMembers(BaseModel):
 
 
 class LobbyState(BaseModel):
+    game_owner: str
     teams: list[TeamWithMembers]
     players: list[str]
 

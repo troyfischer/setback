@@ -154,6 +154,21 @@ export async function leaveTeam(
   });
 }
 
+export async function deleteTeam(
+  baseUrl: string,
+  token: string,
+  request: UpdateTeamRequest,
+) {
+  return requestJson(`${baseUrl}/team/delete`, {
+    body: JSON.stringify(request),
+    headers: {
+      ...withBearer(token),
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+}
+
 export async function fetchLobbyState(
   baseUrl: string,
   token: string,
