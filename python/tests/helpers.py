@@ -86,7 +86,7 @@ def create_and_join_teams(
                 "/team/join",
                 headers={"Authorization": f"Bearer {authenticated_users[member]}"},
                 json=UpdateTeamRequest(
-                    team_id=team.id, game_id=team.game_id
+                    team_number=team.team_number, game_id=team.game_id
                 ).model_dump(),
             )
             assert res.status_code == HTTPStatus.OK, f"Failed to join team: {res.text}"

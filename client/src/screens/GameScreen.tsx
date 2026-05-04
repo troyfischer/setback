@@ -1,11 +1,11 @@
-import { startTransition, useDeferredValue, useState } from 'react';
+import { startTransition, useDeferredValue, useEffect, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 
 import { ActionButton } from '../components/ActionButton';
 import { PlayingCard } from '../components/PlayingCard';
 import { useAuth } from '../context/auth';
 import { useGameSubscription } from '../hooks/useGameSubscription';
-import { bidGame, playCard } from '../lib/api';
+import { bidGame, fetchGameState, playCard } from '../lib/api';
 import { formatCard, formatPhase, getCurrentTurnPlayer, getMyHand, normalizeBaseUrl } from '../lib/format';
 import type { GameEvent, GameStatePlayerScoped, SetbackCard } from '../types/setback';
 
@@ -26,6 +26,13 @@ export function GameScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const deferredGameState = useDeferredValue(gameState);
+
+  useEffect(() => {
+    if (!activeGameId || !accessToken) return;
+    fetchGameState(normalizeBaseUrl(baseUrl), accessToken, activeGameId)
+      .then((state) => { startTransition(() => { setGameState(state); }); })
+      .catch((err: unknown) => { setError(err instanceof Error ? err.message : 'Failed to load game state'); });
+  }, [accessToken, activeGameId, baseUrl]);
 
   const subscription = useGameSubscription({
     accessToken,
@@ -218,18 +225,6 @@ export function GameScreen() {
             </div>
           </div>
 
-          {/* Current trick */}
-          {trick.length > 0 && (
-            <div className="rounded-3xl bg-[#fffaf2] p-5 shadow-xl flex flex-col gap-4">
-              <h3 className="text-base font-extrabold text-[#102947]">Current trick</h3>
-              <div className="flex flex-wrap gap-3">
-                {trick.map((card, i) => (
-                  <PlayingCard key={`${card.player_id}-${i}`} card={card} caption={card.player_id} />
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* Bidding */}
           {gs.phase === 'bid' && (
             <div className="rounded-3xl bg-[#fffaf2] p-5 shadow-xl flex flex-col gap-4">
@@ -251,15 +246,28 @@ export function GameScreen() {
                 ))}
               </div>
               {bidHistory.length > 0 && (
-                <div className="rounded-xl bg-[#eff4fa] p-3 flex flex-col gap-1">
-                  <p className="text-xs font-bold text-[#5c7593] uppercase tracking-wide">This round</p>
-                  {bidHistory.map((bid, i) => (
-                    <p key={`${bid.player_id}-${i}`} className="text-sm text-[#173152]">
-                      {bid.player_id} {bid.amount === 0 ? 'passed' : `bid ${bid.amount}`}
-                    </p>
-                  ))}
-                </div>
+                <RoundActivityTable
+                  rows={bidHistory.map((b) => ({
+                    player: b.player_id,
+                    action: b.amount === 0 ? 'Pass' : 'Bid',
+                    detail: b.amount === 0 ? '—' : String(b.amount),
+                  }))}
+                />
               )}
+            </div>
+          )}
+
+          {/* Current trick */}
+          {trick.length > 0 && (
+            <div className="rounded-3xl bg-[#fffaf2] p-5 shadow-xl flex flex-col gap-4">
+              <h3 className="text-base font-extrabold text-[#102947]">Current trick</h3>
+              <RoundActivityTable
+                rows={trick.map((c) => ({
+                  player: c.player_id,
+                  action: 'Played',
+                  detail: formatCard(c),
+                }))}
+              />
             </div>
           )}
 
@@ -292,6 +300,31 @@ export function GameScreen() {
         </>
       )}
     </div>
+  );
+}
+
+type ActivityRow = { player: string; action: string; detail: string };
+
+function RoundActivityTable({ rows }: { rows: ActivityRow[] }) {
+  return (
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-[#5c7593]">
+          <th className="pb-1.5 pr-4">Player</th>
+          <th className="pb-1.5 pr-4">Action</th>
+          <th className="pb-1.5">Detail</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row, i) => (
+          <tr key={i} className="border-t border-[#dce6f0]">
+            <td className="py-1.5 pr-4 font-semibold text-[#102947]">{row.player}</td>
+            <td className="py-1.5 pr-4 text-[#5c7593]">{row.action}</td>
+            <td className="py-1.5 font-mono font-bold text-[#102947]">{row.detail}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 

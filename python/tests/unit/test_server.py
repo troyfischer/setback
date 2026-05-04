@@ -3,21 +3,21 @@
 
 import asyncio
 from datetime import datetime
+from http import HTTPStatus
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from http import HTTPStatus
 
 import pytest
 from fakeredis import FakeRedis
 from fakeredis.aioredis import FakeRedis as AsyncFakeRedis
 from fastapi.testclient import TestClient
 
+import src.game.routes.game as game_routes
 from src.auth import routes as auth_routes
 from src.auth.sso.models import OAuthUser
-from src.game import routes as game_routes
+from src.game.events import GameEvent
 from src.game.manager import GameStatePlayerScoped
 from src.game.models import Game, Team
-from src.game.events import GameEvent
 from src.game.sse import ConnectionManager
 from src.main import app
 from tests.helpers import (
@@ -103,6 +103,20 @@ def teams(
 
 def test_join_team(teams: list[Team]):
     assert len(teams) == 3
+
+
+def test_only_owner_can_start_game(
+    client: TestClient,
+    authenticated_users: dict[str, str],
+    game: Game,
+    teams: list[Team],
+):
+    res = client.post(
+        "/game/start",
+        headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
+        json={"game_id": game.id},
+    )
+    assert res.status_code == HTTPStatus.FORBIDDEN
 
 
 @pytest.fixture

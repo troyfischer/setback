@@ -225,6 +225,17 @@ export async function playCard(
   });
 }
 
+export async function fetchGameState(
+  baseUrl: string,
+  token: string,
+  gameId: number,
+) {
+  return requestJson<GameStatePlayerScoped>(`${baseUrl}/game/${gameId}/state`, {
+    headers: withBearer(token),
+    method: "GET",
+  });
+}
+
 export async function createSubscribeToken(
   baseUrl: string,
   token: string,
