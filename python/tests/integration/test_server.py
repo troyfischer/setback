@@ -9,7 +9,7 @@ import httpx
 import pytest
 from testcontainers.compose import DockerCompose
 
-from src.game.manager import GameStatePlayerScoped
+from src.game.manager import GameStatePlayerScoped, Phase
 from src.game.models import Game, Team
 from src.logging import new_logger
 from tests.helpers import (
@@ -19,6 +19,7 @@ from tests.helpers import (
     do_bidding,
     join_game,
     play_full_game,
+    play_full_round,
     play_trick,
     start_game,
 )
@@ -188,15 +189,21 @@ def test_play_single_trick(
     log.info("✓ completed one trick")
 
 
+def test_play_full_round(client: httpx.Client, authenticated_users: dict[str, str]):
+    fresh_game = create_game(client, authenticated_users[USERS[0]])
+    join_game(client, authenticated_users, fresh_game, USERS)
+    create_and_join_teams(client, authenticated_users, fresh_game, USERS)
+    game_state = start_game(client, authenticated_users[USERS[0]], fresh_game.id)
+    game_state, tricks_played = play_full_round(client, authenticated_users, game_state)
+    assert tricks_played > 0
+    assert game_state.phase == Phase.BID
+
+
 def test_play_full_game(client: httpx.Client, authenticated_users: dict[str, str]):
     fresh_game = create_game(client, authenticated_users[USERS[0]])
     join_game(client, authenticated_users, fresh_game, USERS)
     create_and_join_teams(client, authenticated_users, fresh_game, USERS)
     game_state = start_game(client, authenticated_users[USERS[0]], fresh_game.id)
-
     game_state, tricks_played = play_full_game(client, authenticated_users, game_state)
-
-    log.info(
-        f"✓ completed full game - {tricks_played} tricks played across multiple rounds"
-    )
     assert tricks_played > 0
+    assert game_state.phase == Phase.COMPLETE

@@ -186,7 +186,7 @@ def play_full_round(
 
     tricks_played = 0
     max_tricks = Dealer.CARDS_PER_HAND
-    while game_state.phase != Phase.BID:
+    while game_state.phase == Phase.PLAY:
         assert tricks_played < max_tricks, f"Round stalled after {tricks_played} tricks"
         game_state = play_trick(client, authenticated_users, game_state)
         tricks_played += 1
