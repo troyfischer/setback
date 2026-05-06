@@ -235,7 +235,7 @@ class GameRoundPlayerScoped(_GameRound):
     """
 
     player_id: PlayerId
-    my_hand: list[SetbackCard] = Field(
+    hand: list[SetbackCard] = Field(
         default_factory=list,
         description="requesting player's hand",
     )
@@ -334,7 +334,7 @@ class GameRound(_GameRound):
             trump=self.trump,
             score=self.score,
             player_id=player_id,
-            my_hand=self.hands[order.get_idx(player_id)],
+            hand=self.hands[order.get_idx(player_id)],
         )
 
     @staticmethod
@@ -394,6 +394,12 @@ class _GameState(GameModel):
     phase: Phase
     score: dict[TeamId, int]
     order: PlayerOrder
+
+    def check_playable(self) -> None:
+        if not self.order.order:
+            raise InvalidGameStateException(
+                f"game {self.game_id} does not have any players"
+            )
 
 
 class GameState(_GameState):
@@ -583,18 +589,19 @@ class GameManager:
     def start_game(self, game: Game) -> GameState:
         with Session(self.engine) as db:
             teams = list(db.exec(select(Team).where(Team.game_id == game.id)).all())
-            members: dict[int, list[TeamMember]] = defaultdict(list)
+            member_map: dict[TeamId, list[TeamMember]] = defaultdict(list)
             for team in teams:
-                for member in db.exec(
+                members = db.exec(
                     select(TeamMember).where(
                         (TeamMember.game_id == game.id)
                         & (TeamMember.team_id == team.id)
                     )
-                ).all():
-                    members[team.id].append(member)
+                ).all()
+                for member in members:
+                    member_map[team.id].append(member)
 
         order: list[TeamMember] = []
-        for grouped_team in zip(*members.values(), strict=True):
+        for grouped_team in zip(*member_map.values(), strict=True):
             order.extend(grouped_team)
 
         player_order = PlayerOrder(
@@ -615,6 +622,8 @@ class GameManager:
             score={team.id: 0 for team in teams},
             active_round=GameRound.new_round(game.id, len(order)),
         )
+
+        gs.check_playable()  # raises if not playable
 
         self._save_state(gs)
         self._publish_event("game_started", gs)

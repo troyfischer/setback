@@ -34,6 +34,14 @@ def create_authenticated_users(client: HTTPClient, users: list[str]) -> dict[str
     return tokens
 
 
+def delete_game(client: HTTPClient, auth_token: str, game_id: int) -> None:
+    client.post(
+        "/game/delete",
+        headers={"Authorization": f"Bearer {auth_token}"},
+        json={"game_id": game_id},
+    )
+
+
 def create_game(client: HTTPClient, auth_token: str) -> Game:
     res = client.post(
         "/game/create",
@@ -152,13 +160,13 @@ def play_trick(
 
         # Fetch the state scoped to this player so we can see their hand.
         player_state = fetch_player_state(client, auth_token, game_state.game_id)
-        my_hand = player_state.active_round.my_hand
+        hand = player_state.active_round.hand
         trump = player_state.active_round.trump
         active_trick = player_state.active_round.active_trick
 
-        card = my_hand[0]
-        for possible_card in my_hand:
-            if active_trick.is_card_valid(my_hand, possible_card, trump):
+        card = hand[0]
+        for possible_card in hand:
+            if active_trick.is_card_valid(hand, possible_card, trump):
                 card = possible_card
                 break
 

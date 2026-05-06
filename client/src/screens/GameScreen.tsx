@@ -77,7 +77,7 @@ export function GameScreen() {
   }
 
   function handleLeaveTable() {
-    navigate('/lobby');
+    navigate(activeGameId ? `/lobby/${activeGameId}` : '/lobby');
   }
 
   if (!deferredGameState) {

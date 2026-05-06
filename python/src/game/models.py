@@ -9,11 +9,19 @@ from typing import Literal, override
 
 from pydantic import BaseModel
 from pydantic import Field as PydField
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import ForeignKey, UniqueConstraint
+from sqlalchemy import Column as SaColumn
+from sqlalchemy import Integer
 from sqlmodel import Field as SqlField
 from sqlmodel import ForeignKeyConstraint, SQLModel
 
 # SQL Models
+
+
+class GameStatus(enum.StrEnum):
+    CREATED = enum.auto()
+    ACTIVE = enum.auto()
+    ENDED = enum.auto()
 
 
 class Game(SQLModel, table=True):
@@ -23,17 +31,17 @@ class Game(SQLModel, table=True):
         default_factory=lambda: datetime.datetime.now(tz=datetime.UTC)
     )
     owner: str = SqlField(foreign_key="oauthuser.sub")
-    started: bool = False
+    status: GameStatus = SqlField(default=GameStatus.CREATED)
 
 
 class Player(SQLModel, table=True):
     id: str = SqlField(foreign_key="oauthuser.sub", primary_key=True)
-    game_id: int = SqlField(foreign_key="game.id", primary_key=True)
+    game_id: int = SqlField(sa_column=SaColumn(Integer, ForeignKey("game.id", ondelete="CASCADE"), primary_key=True))
 
 
 class Team(SQLModel, table=True):
     id: int = SqlField(default=None, primary_key=True)
-    game_id: int = SqlField(foreign_key="game.id")
+    game_id: int = SqlField(sa_column=SaColumn(Integer, ForeignKey("game.id", ondelete="CASCADE"), nullable=False))
     team_number: int
     owner: str = SqlField(foreign_key="oauthuser.sub")
 
@@ -54,11 +62,13 @@ class TeamMember(SQLModel, table=True):
         ForeignKeyConstraint(
             ["game_id", "player_id"],
             ["player.game_id", "player.id"],
+            ondelete="CASCADE",
         ),
         # enforce the team exists inside the same game
         ForeignKeyConstraint(
             ["game_id", "team_id"],
             ["team.game_id", "team.id"],
+            ondelete="CASCADE",
         ),
     )
 
@@ -102,7 +112,7 @@ class TeamWithMembers(BaseModel):
 
 class LobbyState(BaseModel):
     game_owner: str
-    game_started: bool
+    game_status: GameStatus
     teams: list[TeamWithMembers]
     players: list[str]
 

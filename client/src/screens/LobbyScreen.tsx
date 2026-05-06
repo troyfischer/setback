@@ -6,7 +6,9 @@ import { useAuth } from "../context/auth";
 import {
   createGame,
   createTeam,
+  deleteGame,
   deleteTeam,
+  fetchUserRelevantGames,
   fetchLobbyState,
   joinGame,
   joinTeam,
@@ -28,6 +30,7 @@ export function LobbyScreen() {
   const [joinCode, setJoinCode] = useState("");
   const [createdGame, setCreatedGame] = useState<GameRecord | null>(null);
   const [lobbyState, setLobbyState] = useState<LobbyState | null>(null);
+  const [activeGames, setActiveGames] = useState<GameRecord[]>([]);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +59,13 @@ export function LobbyScreen() {
       // Silently ignore stale data
     }
   }, [accessToken, activeGameId, baseUrl]);
+
+  useEffect(() => {
+    if (!accessToken || inTable) return;
+    void fetchUserRelevantGames(normalizeBaseUrl(baseUrl), accessToken).then(
+      setActiveGames,
+    );
+  }, [accessToken, baseUrl, inTable]);
 
   // Poll lobby state while waiting
   useEffect(() => {
@@ -197,6 +207,16 @@ export function LobbyScreen() {
     });
   }
 
+  async function handleDeleteGame() {
+    await runAction("Delete game", async () => {
+      if (!activeGameId) throw new Error("Not in a game.");
+      await deleteGame(normalizeBaseUrl(baseUrl), accessToken, {
+        game_id: activeGameId,
+      });
+      navigate("/lobby");
+    });
+  }
+
   async function handleStartGame() {
     await runAction("Start game", async () => {
       if (!activeGameId) throw new Error("Create or join a game first.");
@@ -269,6 +289,34 @@ export function LobbyScreen() {
               }}
             />
           </div>
+
+          {activeGames.length > 0 && (
+            <div className="rounded-3xl bg-[#fffaf2] p-6 shadow-xl flex flex-col gap-3">
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-[1.6px] text-[#b54434]">
+                  In Progress
+                </span>
+                <h2 className="text-xl font-extrabold text-[#102947] mt-0.5">
+                  Rejoin a game
+                </h2>
+              </div>
+              {activeGames.map((game) => (
+                <div
+                  key={game.id}
+                  className="flex items-center justify-between rounded-2xl bg-[#eff4fa] px-4 py-3"
+                >
+                  <span className="text-sm font-semibold text-[#102947]">
+                    Game #{game.id}
+                  </span>
+                  <ActionButton
+                    label="Rejoin"
+                    onClick={() => navigate(game.status === "active" ? `/game/${game.id}` : `/lobby/${game.id}`)}
+                    tone="secondary"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Divider */}
           <div className="flex items-center gap-3">
@@ -467,13 +515,23 @@ export function LobbyScreen() {
 
           <div className="flex flex-wrap gap-3">
             {currentUser && lobbyState?.game_owner === currentUser.sub && (
-              <ActionButton
-                busy={busyAction === "Start game"}
-                label="Start Game"
-                onClick={() => {
-                  void handleStartGame();
-                }}
-              />
+              <>
+                <ActionButton
+                  busy={busyAction === "Start game"}
+                  label="Start Game"
+                  onClick={() => {
+                    void handleStartGame();
+                  }}
+                />
+                <ActionButton
+                  busy={busyAction === "Delete game"}
+                  label="Delete Game"
+                  onClick={() => {
+                    void handleDeleteGame();
+                  }}
+                  tone="ghost"
+                />
+              </>
             )}
             <ActionButton
               label="Leave Table"

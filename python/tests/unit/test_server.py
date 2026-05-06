@@ -2,6 +2,7 @@
 # pyright: basic
 
 import asyncio
+from collections.abc import Generator
 from datetime import datetime
 from http import HTTPStatus
 from pathlib import Path
@@ -24,6 +25,7 @@ from tests.helpers import (
     create_and_join_teams,
     create_authenticated_users,
     create_game,
+    delete_game,
     do_bidding,
     join_game,
     play_full_game,
@@ -79,8 +81,10 @@ def print_first_line():
 
 
 @pytest.fixture
-def game(client: TestClient, authenticated_users: dict[str, str]) -> Game:
-    return create_game(client, authenticated_users[USERS[0]])
+def game(client: TestClient, authenticated_users: dict[str, str]) -> Generator[Game, None, None]:
+    g = create_game(client, authenticated_users[USERS[0]])
+    yield g
+    delete_game(client, authenticated_users[USERS[0]], g.id)
 
 
 def test_game(game: Game):

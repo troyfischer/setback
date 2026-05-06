@@ -62,12 +62,8 @@ async def delete_team(
     team: Annotated[Team, Depends(get_team)],
 ):
     if team.owner != user.sub:
-        raise HTTPException(403, "only the team owner")
+        raise HTTPException(403, "only the team owner can delete a team")
 
-    for member in db.exec(
-        select(TeamMember).where(TeamMember.team_id == team.id)
-    ).all():
-        db.delete(member)
     db.delete(team)
     db.commit()
 

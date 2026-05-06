@@ -22,7 +22,7 @@ export type GameRecord = {
   id: number;
   join_code: string;
   owner: string;
-  started: boolean;
+  status: GameStatus;
 };
 
 export type PlayerRecord = {
@@ -41,11 +41,13 @@ export type TeamWithMembers = TeamRecord & {
   members: string[];
 };
 
+export type GameStatus = "created" | "active" | "ended";
+
 export type LobbyState = {
   game_owner: string;
   teams: TeamWithMembers[];
   players: string[];
-  game_started: boolean;
+  game_status: GameStatus;
 };
 
 export type TeamMemberRecord = {
@@ -96,7 +98,7 @@ export type GameRoundPlayerScoped = {
   bid: TurnCollection<BidAction>;
   dealer: ModIndex;
   game_id: number;
-  my_hand: SetbackCard[];
+  hand: SetbackCard[];
   player_id: string;
   score: RoundScore | null;
   trick: TurnCollection<PlayedCard> | null;

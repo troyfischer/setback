@@ -7,7 +7,8 @@ import redis
 import redis.asyncio as redis_async
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import Engine
+from sqlalchemy import Engine, event
+from sqlalchemy.engine import Connection
 from sqlmodel import SQLModel, create_engine
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -25,6 +26,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # relational db
     engine: Engine = create_engine(settings.database_url, connect_args={})
+
+    if engine.dialect.name == "sqlite":
+        @event.listens_for(engine, "connect")
+        def set_sqlite_pragma(conn: Connection, _: object) -> None:
+            conn.execute("PRAGMA foreign_keys=ON")  # type: ignore[arg-type]
+
     SQLModel.metadata.create_all(engine)
     app.state.db_engine = engine
 

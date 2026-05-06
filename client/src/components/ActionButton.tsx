@@ -1,9 +1,10 @@
-type Tone = 'primary' | 'secondary' | 'ghost';
+type Tone = 'primary' | 'secondary' | 'ghost' | 'danger';
 
 const toneClasses: Record<Tone, string> = {
   primary: 'bg-[#b54434] border-[#962a24] text-[#fffdf9] hover:bg-[#a03b2d]',
   secondary: 'bg-[#173152] border-[#102947] text-[#f8fbff] hover:bg-[#1e3d66]',
   ghost: 'bg-[#f1f5fa] border-[#cbd7e6] text-[#14304d] hover:bg-[#e2eaf5]',
+  danger: 'bg-red-400 border-red-400 text-white hover:bg-red-300 hover:border-red-300',
 };
 
 type Props = {

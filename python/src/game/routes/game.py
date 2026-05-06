@@ -11,7 +11,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ValidationError
-from sqlmodel import select
+from sqlmodel import col, func, select
 
 from src.auth.jwt import JwtManager
 from src.auth.sso.models import OAuthUser
@@ -23,6 +23,7 @@ from src.game.models import (
     BidRequest,
     Game,
     GameManagementRequest,
+    GameStatus,
     LobbyState,
     PlayCardRequest,
     Player,
@@ -43,12 +44,37 @@ unauthenticated_router = APIRouter(prefix="/game")
 async def create_game(request: Request, db: DBSession):
     user = cast(OAuthUser, request.state.user)
 
+    in_progress = db.exec(
+        select(func.count())
+        .select_from(Player)
+        .join(Game, col(Game.id) == col(Player.game_id))
+        .where(Player.id == user.sub)
+        .where(Game.status != GameStatus.ENDED)
+    ).one()
+
+    if in_progress >= 5:
+        raise HTTPException(429, "too many active games")
+
     game = Game(owner=user.sub)
     db.add(game)
     db.commit()
     db.refresh(game)
-
     return game
+
+
+@router.get("/games")
+async def get_games(
+    user: Annotated[OAuthUser, Depends(get_current_user)], db: DBSession
+):
+    return db.exec(
+        select(Game)
+        .outerjoin(TeamMember, col(Game.id) == col(TeamMember.game_id))
+        .where(
+            (Game.owner == user.sub) | (TeamMember.player_id == user.sub)
+        )
+        .where(Game.status != GameStatus.ENDED)
+        .distinct()
+    ).all()
 
 
 @router.post("/delete")
@@ -59,6 +85,7 @@ async def delete_game(
 ):
     if game.owner != user.sub:
         raise HTTPException(403, "only game owner may delete it")
+
     db.delete(game)
     db.commit()
     return game
@@ -102,7 +129,7 @@ def start_game(
 
     game_state = ctx.gm.start_game(game)
 
-    game.started = True
+    game.status = GameStatus.ACTIVE
     game = db.merge(game)
     db.commit()
     return scope_state_for_player(game_state, user.sub)
@@ -291,7 +318,7 @@ def get_lobby_state(
             for t in teams
         ],
         players=[p.id for p in players],
-        game_started=game.started,
+        game_status=game.status,
     )
 
 

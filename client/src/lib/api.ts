@@ -236,6 +236,28 @@ export async function fetchGameState(
   });
 }
 
+export async function deleteGame(
+  baseUrl: string,
+  token: string,
+  request: GameRequest,
+) {
+  return requestJson<GameRecord>(`${baseUrl}/game/delete`, {
+    body: JSON.stringify(request),
+    headers: {
+      ...withBearer(token),
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+}
+
+export async function fetchUserRelevantGames(baseUrl: string, token: string) {
+  return requestJson<GameRecord[]>(`${baseUrl}/game/games`, {
+    headers: withBearer(token),
+    method: "GET",
+  });
+}
+
 export async function createSubscribeToken(
   baseUrl: string,
   token: string,

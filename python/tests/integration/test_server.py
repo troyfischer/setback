@@ -93,7 +93,6 @@ def client(docker_compose, base_url: str) -> httpx.Client:
 @pytest.fixture(scope="module")
 def authenticated_users(client: httpx.Client) -> dict[str, str]:
     users = create_authenticated_users(client, USERS)
-    log.info(f"\n✓ created {len(users)} test users")
     return users
 
 
@@ -112,7 +111,6 @@ def test_create_users(authenticated_users: dict[str, str]):
 @pytest.fixture(scope="module")
 def game(client: httpx.Client, authenticated_users: dict[str, str]) -> Game:
     game = create_game(client, authenticated_users[USERS[0]])
-    print(f"\n✓ Created game {game.id}")
     return game
 
 
@@ -139,7 +137,6 @@ def teams(
     client: httpx.Client, authenticated_users: dict[str, str], joined_game: Game
 ) -> list[Team]:
     teams = create_and_join_teams(client, authenticated_users, joined_game, USERS)
-    log.info(f"✓ created {len(teams)} teams")
     return teams
 
 
@@ -157,7 +154,6 @@ def started_game(
     teams: list[Team],
 ) -> GameStatePlayerScoped:
     game_state = start_game(client, authenticated_users[USERS[0]], game.id)
-    log.info(f"✓ game started - phase: {game_state.phase}")
     return game_state
 
 
@@ -172,7 +168,6 @@ def game_after_bid(
     started_game: GameStatePlayerScoped,
 ) -> GameStatePlayerScoped:
     game_state = do_bidding(client, authenticated_users, started_game)
-    log.info(f"✓ bidding complete - winner: turn {game_state.active_round.bid.turn}")
     return game_state
 
 
@@ -185,8 +180,8 @@ def test_play_single_trick(
     authenticated_users: dict[str, str],
     game_after_bid: GameStatePlayerScoped,
 ):
-    play_trick(client, authenticated_users, game_after_bid)
-    log.info("✓ completed one trick")
+    game_state = play_trick(client, authenticated_users, game_after_bid)
+    assert game_state.phase == Phase.PLAY
 
 
 def test_play_full_round(client: httpx.Client, authenticated_users: dict[str, str]):
