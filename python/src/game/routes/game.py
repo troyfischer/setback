@@ -17,7 +17,6 @@ from src.auth.jwt import JwtManager
 from src.auth.sso.models import OAuthUser
 from src.auth.utils import get_current_user
 from src.db import DBSession
-from src.game.exceptions import InvalidGameStateException
 from src.game.manager import GameStatePlayerScoped
 from src.game.models import (
     BidRequest,
@@ -33,7 +32,7 @@ from src.game.models import (
 )
 from src.game.scope import scope_state_for_player
 from src.game.sse import ConnectionManager
-from src.game.utils import get_game, get_player_in_game
+from src.game.utils import get_game, get_player_in_game, require_owner
 from src.request import RequestContext
 
 router = APIRouter(prefix="/game", dependencies=[Depends(get_current_user)])
@@ -69,9 +68,7 @@ async def get_games(
     return db.exec(
         select(Game)
         .outerjoin(TeamMember, col(Game.id) == col(TeamMember.game_id))
-        .where(
-            (Game.owner == user.sub) | (TeamMember.player_id == user.sub)
-        )
+        .where((Game.owner == user.sub) | (TeamMember.player_id == user.sub))
         .where(Game.status != GameStatus.ENDED)
         .distinct()
     ).all()
@@ -79,15 +76,24 @@ async def get_games(
 
 @router.post("/delete")
 async def delete_game(
+    db: DBSession,
+    game: Annotated[Game, Depends(require_owner)],
+):
+    db.delete(game)
+    db.commit()
+    return game
+
+
+@router.post("/leave")
+async def leave_game(
     user: Annotated[OAuthUser, Depends(get_current_user)],
     db: DBSession,
     game: Annotated[Game, Depends(get_game)],
 ):
-    if game.owner != user.sub:
-        raise HTTPException(403, "only game owner may delete it")
-
-    db.delete(game)
+    p = Player(game_id=game.id, id=user.sub)
+    db.delete(p)
     db.commit()
+
     return game
 
 
@@ -116,16 +122,13 @@ async def join_game(
 def start_game(
     ctx: RequestContext,
     db: DBSession,
-    game: Annotated[Game, Depends(get_game)],
+    game: Annotated[Game, Depends(require_owner)],
     user: Annotated[OAuthUser, Depends(get_current_user)],
 ) -> GameStatePlayerScoped:
     # TODO:
     # 1. ensure at least X teams
     # 2. ensure no empty teams
     # 3. ensure minimum players
-
-    if game.owner != user.sub:
-        raise HTTPException(403, "only game owner can start the game")
 
     game_state = ctx.gm.start_game(game)
 
@@ -144,8 +147,6 @@ def bid_game(
 ) -> GameStatePlayerScoped:
     try:
         state = ctx.gm.bid_game(game, player, req)
-    except InvalidGameStateException as e:
-        raise HTTPException(400, detail=str(e)) from e
     except ValidationError as e:
         raise HTTPException(400, detail=str(e)) from e
     return scope_state_for_player(state, player.id)
@@ -160,8 +161,6 @@ def play_trick(
 ) -> GameStatePlayerScoped:
     try:
         state = ctx.gm.play_card(game, player, req.card)
-    except InvalidGameStateException as e:
-        raise HTTPException(400, detail=str(e)) from e
     except ValidationError as e:
         raise HTTPException(400, detail=str(e)) from e
     return scope_state_for_player(state, player.id)
@@ -282,7 +281,6 @@ async def game_subscribe(
 
 @router.get("/{game_id}/lobby")
 def get_lobby_state(
-    ctx: RequestContext,
     game_id: int,
     user: Annotated[OAuthUser, Depends(get_current_user)],
     db: DBSession,
@@ -339,10 +337,5 @@ def get_game_state(
     game = db.get(Game, game_id)
     if not game:
         raise HTTPException(404, "game not found")
-
-    try:
-        state = ctx.gm.get_state(game)
-    except InvalidGameStateException as e:
-        raise HTTPException(400, detail=str(e)) from e
-
+    state = ctx.gm.get_state(game)
     return scope_state_for_player(state, user.sub)

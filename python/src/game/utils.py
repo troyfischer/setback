@@ -49,3 +49,12 @@ async def get_team(req: UpdateTeamRequest, db: DBSession) -> Team:
     if not team:
         raise HTTPException(404, "team does not exist")
     return team
+
+
+async def require_owner(
+    game: Annotated[Game, Depends(get_game)],
+    user: Annotated[OAuthUser, Depends(get_current_user)],
+) -> Game:
+    if game.owner != user.sub:
+        raise HTTPException(403, "only the game owner can perform this action")
+    return game
