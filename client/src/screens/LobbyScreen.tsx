@@ -305,14 +305,32 @@ export function LobbyScreen() {
                   key={game.id}
                   className="flex items-center justify-between rounded-2xl bg-[#eff4fa] px-4 py-3"
                 >
-                  <span className="text-sm font-semibold text-[#102947]">
-                    Game #{game.id}
-                  </span>
-                  <ActionButton
-                    label="Rejoin"
-                    onClick={() => navigate(game.status === "active" ? `/game/${game.id}` : `/lobby/${game.id}`)}
-                    tone="secondary"
-                  />
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-semibold text-[#102947]">
+                      Game #{game.id}
+                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-[1.2px] text-[#4e647f]">
+                      {game.status === "active" ? "In Progress" : "Waiting to Start"}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    {currentUser && game.owner === currentUser.sub && (
+                      <ActionButton
+                        busy={busyAction === `Delete game ${game.id}`}
+                        label="Delete"
+                        tone="ghost"
+                        onClick={() => void runAction(`Delete game ${game.id}`, async () => {
+                          await deleteGame(normalizeBaseUrl(baseUrl), accessToken, { game_id: game.id });
+                          setActiveGames((prev) => prev.filter((g) => g.id !== game.id));
+                        })}
+                      />
+                    )}
+                    <ActionButton
+                      label="Rejoin"
+                      onClick={() => navigate(game.status === "active" ? `/game/${game.id}` : `/lobby/${game.id}`)}
+                      tone="secondary"
+                    />
+                  </div>
                 </div>
               ))}
             </div>

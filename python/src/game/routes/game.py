@@ -287,13 +287,14 @@ def get_lobby_state(
     user: Annotated[OAuthUser, Depends(get_current_user)],
     db: DBSession,
 ) -> LobbyState:
-    player = db.get(Player, (user.sub, game_id))
-    if not player:
-        raise HTTPException(403, "not an active player in game")
-
     game = db.get(Game, game_id)
     if not game:
         raise HTTPException(404, "game not found")
+
+    if game.owner != user.sub:
+        player = db.get(Player, (user.sub, game_id))
+        if not player:
+            raise HTTPException(403, "not an active player in game")
 
     teams = db.exec(select(Team).where(Team.game_id == game_id)).all()
     team_members = db.exec(
