@@ -13,6 +13,7 @@ from sqlmodel import SQLModel, create_engine
 from starlette.middleware.sessions import SessionMiddleware
 
 import src.auth.routes
+from src.game.exceptions import InvalidGameStateException, invalid_game_state_handler
 import src.game.routes
 from src.config import Settings
 from src.game.manager import GameManager
@@ -28,6 +29,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     engine: Engine = create_engine(settings.database_url, connect_args={})
 
     if engine.dialect.name == "sqlite":
+
         @event.listens_for(engine, "connect")
         def set_sqlite_pragma(conn: Connection, _: object) -> None:
             conn.execute("PRAGMA foreign_keys=ON")  # type: ignore[arg-type]
@@ -75,6 +77,8 @@ app.add_middleware(
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
 app.include_router(src.auth.routes.router)
 app.include_router(src.game.routes.router)
+
+app.add_exception_handler(InvalidGameStateException, invalid_game_state_handler)
 
 
 @app.get("/health")
