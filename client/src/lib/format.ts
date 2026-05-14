@@ -61,3 +61,28 @@ export function getCurrentTurnPlayer(
 export function getMyHand(state: GameStatePlayerScoped): SetbackCard[] {
   return state.active_round.hand ?? [];
 }
+
+export function isCardPlayable(
+  card: SetbackCard,
+  hand: SetbackCard[],
+  trick: SetbackCard[],
+  trump: SetbackCard["suit"] | null,
+): boolean {
+  // First card of the trick — always valid
+  if (trick.length === 0) return true;
+  // No trump established yet — always valid
+  if (!trump) return true;
+
+  const ledSuit = trick[0]!.suit;
+  const handHasLedSuit = hand.some((c) => c.suit === ledSuit);
+  const handHasTrump = hand.some((c) => c.suit === trump);
+
+  if (card.suit === trump) return true;
+  if (card.suit === ledSuit) return true;
+  // Can play anything if you have neither led suit nor trump
+  if (!handHasLedSuit && !handHasTrump) return true;
+  // Can play off-suit only if you have no led suit cards
+  if (!handHasLedSuit) return true;
+
+  return false;
+}

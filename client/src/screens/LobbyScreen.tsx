@@ -19,6 +19,26 @@ import {
 import { normalizeBaseUrl } from "../lib/format";
 import type { GameRecord, LobbyState } from "../types/setback";
 
+const glassPanel = [
+  "rounded-3xl backdrop-blur-xl border shadow-xl flex flex-col gap-4",
+  "bg-white/[0.65] border-white/75 shadow-black/[0.04]",
+  "dark:bg-white/[0.06] dark:border-white/[0.10] dark:shadow-black/50",
+].join(" ");
+
+const glassInner = [
+  "rounded-2xl border",
+  "bg-white/50 border-white/60",
+  "dark:bg-white/[0.04] dark:border-white/[0.07]",
+].join(" ");
+
+const inputClass = [
+  "rounded-2xl border px-4 py-3 text-base outline-none transition w-full",
+  "bg-white/70 border-slate-200/80 text-gray-900 placeholder-slate-400",
+  "focus:border-slate-400/60 focus:ring-2 focus:ring-slate-200/50",
+  "dark:bg-white/[0.07] dark:border-white/10 dark:text-white dark:placeholder-white/30",
+  "dark:focus:border-white/25 dark:focus:ring-white/[0.08]",
+].join(" ");
+
 export function LobbyScreen() {
   const { accessToken, baseUrl, currentUser, setAccessToken, setCurrentUser } =
     useAuth();
@@ -81,14 +101,14 @@ export function LobbyScreen() {
 
   // Non-owners auto-navigate when the owner starts the game
   useEffect(() => {
-    if (!lobbyState?.game_started || !activeGameId) return;
+    if (lobbyState?.game_status !== "active" || !activeGameId) return;
     if (currentUser && lobbyState.game_owner === currentUser.sub) return;
     navigate(`/game/${activeGameId}`);
   }, [
     activeGameId,
     currentUser,
     lobbyState?.game_owner,
-    lobbyState?.game_started,
+    lobbyState?.game_status,
     navigate,
   ]);
 
@@ -237,10 +257,10 @@ export function LobbyScreen() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-3xl font-black tracking-tight text-white">
+          <h1 className="text-3xl font-black tracking-tight text-gray-900 dark:text-white">
             Setback
           </h1>
-          <p className="text-sm text-[#d2deee] mt-0.5">
+          <p className="text-sm text-slate-500 dark:text-blue-200/70 mt-0.5">
             Welcome, {displayName}.
           </p>
         </div>
@@ -255,28 +275,28 @@ export function LobbyScreen() {
       </div>
 
       {error && (
-        <div className="rounded-2xl bg-[rgba(150,45,36,0.94)] px-4 py-3">
-          <p className="text-sm font-semibold text-white">{error}</p>
+        <div className="rounded-2xl border px-4 py-3 bg-red-50 border-red-200/60 dark:bg-red-game/[0.15] dark:border-red-game/25">
+          <p className="text-sm font-semibold text-red-700 dark:text-white">{error}</p>
         </div>
       )}
       {notice && !error && (
-        <div className="rounded-2xl bg-[rgba(31,134,99,0.92)] px-4 py-3">
-          <p className="text-sm font-semibold text-white">{notice}</p>
+        <div className="rounded-2xl border px-4 py-3 bg-emerald-50 border-emerald-200/60 dark:bg-emerald-500/[0.15] dark:border-emerald-500/25">
+          <p className="text-sm font-semibold text-emerald-700 dark:text-white">{notice}</p>
         </div>
       )}
 
       {!inTable ? (
         <>
           {/* Host */}
-          <div className="rounded-3xl bg-[#fffaf2] p-6 shadow-xl flex flex-col gap-4">
+          <div className={`${glassPanel} p-6`}>
             <div>
-              <span className="text-[10px] font-extrabold uppercase tracking-[1.6px] text-[#b54434]">
+              <span className="text-[10px] font-extrabold uppercase tracking-[1.6px] text-red-game">
                 Host
               </span>
-              <h2 className="text-xl font-extrabold text-[#102947] mt-0.5">
+              <h2 className="text-xl font-extrabold text-gray-900 dark:text-white mt-0.5">
                 Start a new table
               </h2>
-              <p className="mt-1 text-sm text-[#4e647f] leading-relaxed">
+              <p className="mt-1 text-sm text-slate-500 dark:text-blue-200/65 leading-relaxed">
                 Create a table and share the join code so the other three seats
                 can fill.
               </p>
@@ -291,25 +311,25 @@ export function LobbyScreen() {
           </div>
 
           {activeGames.length > 0 && (
-            <div className="rounded-3xl bg-[#fffaf2] p-6 shadow-xl flex flex-col gap-3">
+            <div className={`${glassPanel} p-6 gap-3`}>
               <div>
-                <span className="text-[10px] font-extrabold uppercase tracking-[1.6px] text-[#b54434]">
+                <span className="text-[10px] font-extrabold uppercase tracking-[1.6px] text-red-game">
                   In Progress
                 </span>
-                <h2 className="text-xl font-extrabold text-[#102947] mt-0.5">
+                <h2 className="text-xl font-extrabold text-gray-900 dark:text-white mt-0.5">
                   Rejoin a game
                 </h2>
               </div>
               {activeGames.map((game) => (
                 <div
                   key={game.id}
-                  className="flex items-center justify-between rounded-2xl bg-[#eff4fa] px-4 py-3"
+                  className={`flex items-center justify-between ${glassInner} px-4 py-3`}
                 >
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-semibold text-[#102947]">
+                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
                       Game #{game.id}
                     </span>
-                    <span className="text-[10px] font-bold uppercase tracking-[1.2px] text-[#4e647f]">
+                    <span className="text-[10px] font-bold uppercase tracking-[1.2px] text-slate-400 dark:text-slate-400/70">
                       {game.status === "active" ? "In Progress" : "Waiting to Start"}
                     </span>
                   </div>
@@ -338,28 +358,28 @@ export function LobbyScreen() {
 
           {/* Divider */}
           <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-[rgba(247,215,116,0.28)]" />
-            <span className="text-xs font-bold uppercase tracking-wider text-[#d2deee]">
+            <div className="h-px flex-1 bg-slate-200/80 dark:bg-white/[0.10]" />
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-400/70">
               or
             </span>
-            <div className="h-px flex-1 bg-[rgba(247,215,116,0.28)]" />
+            <div className="h-px flex-1 bg-slate-200/80 dark:bg-white/[0.10]" />
           </div>
 
           {/* Join */}
-          <div className="rounded-3xl bg-[#fffaf2] p-6 shadow-xl flex flex-col gap-4">
+          <div className={`${glassPanel} p-6`}>
             <div>
-              <span className="text-[10px] font-extrabold uppercase tracking-[1.6px] text-[#b54434]">
+              <span className="text-[10px] font-extrabold uppercase tracking-[1.6px] text-red-game">
                 Guest
               </span>
-              <h2 className="text-xl font-extrabold text-[#102947] mt-0.5">
+              <h2 className="text-xl font-extrabold text-gray-900 dark:text-white mt-0.5">
                 Join a table
               </h2>
-              <p className="mt-1 text-sm text-[#4e647f] leading-relaxed">
+              <p className="mt-1 text-sm text-slate-500 dark:text-blue-200/65 leading-relaxed">
                 Paste the join code your host shared.
               </p>
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold uppercase tracking-wide text-[#0d1d31]">
+              <label className="text-xs font-bold uppercase tracking-wide text-gray-700 dark:text-blue-100/70">
                 Join code
               </label>
               <input
@@ -368,7 +388,7 @@ export function LobbyScreen() {
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value)}
                 placeholder="42-abc123xyz"
-                className="rounded-2xl border border-[#bfd1e7] bg-[#edf3fa] px-4 py-3 text-base text-[#0d1d31] placeholder-[#8ca3bf] outline-none focus:border-[#102947] focus:ring-2 focus:ring-[#102947]/20 transition"
+                className={inputClass}
               />
             </div>
             <ActionButton
@@ -382,22 +402,22 @@ export function LobbyScreen() {
           </div>
         </>
       ) : (
-        <div className="rounded-3xl bg-[#fffaf2] p-6 shadow-xl flex flex-col gap-5">
+        <div className={`${glassPanel} p-6 gap-5`}>
           <div>
-            <span className="text-[10px] font-extrabold uppercase tracking-[1.6px] text-[#b54434]">
+            <span className="text-[10px] font-extrabold uppercase tracking-[1.6px] text-red-game">
               Table
             </span>
-            <h2 className="text-2xl font-extrabold text-[#102947] mt-0.5">
+            <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white mt-0.5">
               Game #{activeGameId}
             </h2>
-            <p className="mt-1 text-sm text-[#4e647f] leading-relaxed">
+            <p className="mt-1 text-sm text-slate-500 dark:text-blue-200/65 leading-relaxed">
               Set up teams, then start the game when everyone is seated.
             </p>
           </div>
 
           {shareCode && (
-            <div className="rounded-2xl bg-[#102947] px-5 py-4">
-              <p className="text-[10px] font-bold uppercase tracking-[1.4px] text-[#f7d774]">
+            <div className="rounded-2xl bg-navy-800/90 backdrop-blur-sm border border-navy-600/40 dark:bg-navy-900/80 dark:border-white/10 px-5 py-4">
+              <p className="text-[10px] font-bold uppercase tracking-[1.4px] text-gold">
                 Share this join code
               </p>
               <p className="mt-1 font-mono text-2xl font-extrabold text-white tracking-wide">
@@ -407,10 +427,10 @@ export function LobbyScreen() {
           )}
 
           {/* Teams section */}
-          <div className="rounded-2xl bg-[#eff4fa] p-4 flex flex-col gap-4">
+          <div className={`${glassInner} p-4 flex flex-col gap-4`}>
             <div>
-              <h3 className="text-base font-extrabold text-[#102947]">Teams</h3>
-              <p className="mt-0.5 text-xs text-[#4e647f] leading-relaxed">
+              <h3 className="text-base font-extrabold text-gray-900 dark:text-white">Teams</h3>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-blue-200/60 leading-relaxed">
                 Join an open team or create a new one for you and a partner.
               </p>
             </div>
@@ -426,14 +446,14 @@ export function LobbyScreen() {
                   return (
                     <div
                       key={team.id}
-                      className="overflow-hidden rounded-2xl shadow-sm"
+                      className="overflow-hidden rounded-2xl shadow-sm backdrop-blur-sm border bg-white/40 border-white/60 dark:bg-white/[0.05] dark:border-white/[0.09]"
                     >
-                      <div className="flex items-center justify-between bg-[#102947] px-4 py-2.5">
+                      <div className="flex items-center justify-between bg-navy-800/90 dark:bg-navy-700/70 px-4 py-2.5">
                         <span className="text-sm font-extrabold text-white">
                           Team {team.team_number}
                         </span>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold text-[#9fb6d4]">
+                          <span className="text-xs font-semibold text-navy-200/80">
                             {team.members.length}/2
                           </span>
                           {isMember ? (
@@ -443,7 +463,7 @@ export function LobbyScreen() {
                                 void handleLeaveTeam(team.team_number);
                               }}
                               disabled={busyAction === "Leave team"}
-                              className="text-[10px] font-bold uppercase tracking-wide text-[#f7d774] hover:text-white transition-colors disabled:opacity-50"
+                              className="text-[10px] font-bold uppercase tracking-wide text-gold hover:text-white transition-colors disabled:opacity-50"
                             >
                               Leave
                             </button>
@@ -457,7 +477,7 @@ export function LobbyScreen() {
                                 disabled={
                                   busyAction === `Join team ${team.team_number}`
                                 }
-                                className="text-[10px] font-bold uppercase tracking-wide text-[#f7d774] hover:text-white transition-colors disabled:opacity-50"
+                                className="text-[10px] font-bold uppercase tracking-wide text-gold hover:text-white transition-colors disabled:opacity-50"
                               >
                                 Join
                               </button>
@@ -479,7 +499,7 @@ export function LobbyScreen() {
                           )}
                         </div>
                       </div>
-                      <div className="divide-y divide-[#e8f0f8] bg-white">
+                      <div className="divide-y divide-white/20 dark:divide-white/[0.06]">
                         {[0, 1].map((slot) => {
                           const member = team.members[slot];
                           return member ? (
@@ -487,10 +507,10 @@ export function LobbyScreen() {
                               key={slot}
                               className="flex items-center gap-3 px-4 py-2.5"
                             >
-                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#c7d9f0] text-sm font-extrabold text-[#102947]">
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-navy-100/80 dark:bg-navy-600/50 text-sm font-extrabold text-navy-800 dark:text-blue-100">
                                 {member[0]!.toUpperCase()}
                               </div>
-                              <span className="truncate text-sm font-semibold text-[#102947]">
+                              <span className="truncate text-sm font-semibold text-gray-900 dark:text-white">
                                 {member}
                               </span>
                             </div>
@@ -499,8 +519,8 @@ export function LobbyScreen() {
                               key={slot}
                               className="flex items-center gap-3 px-4 py-2.5"
                             >
-                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-[#bfd1e7]" />
-                              <span className="text-sm italic text-[#b0c4d8]">
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-slate-300/60 dark:border-white/15" />
+                              <span className="text-sm italic text-slate-400 dark:text-slate-400/60">
                                 Open seat
                               </span>
                             </div>
@@ -523,7 +543,7 @@ export function LobbyScreen() {
                 tone="secondary"
               />
               {lobbyState && lobbyState.players.length > 0 && (
-                <p className="text-xs text-[#5c7593]">
+                <p className="text-xs text-slate-400 dark:text-slate-400/70">
                   <span className="font-bold">{lobbyState.players.length}</span>{" "}
                   player{lobbyState.players.length !== 1 ? "s" : ""} in the game
                 </p>

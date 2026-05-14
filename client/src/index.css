@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark *), .dark&);
+
 @theme {
   --font-sans: 'Inter', system-ui, sans-serif;
   --color-navy-950: #060f1c;
@@ -11,9 +13,9 @@
   --color-navy-100: #c7d9f0;
   --color-navy-50: #edf3fa;
   --color-cream: #fffaf2;
-  --color-red-game: #b54434;
-  --color-red-game-dark: #962a24;
-  --color-gold: #f7d774;
+  --color-red-game: #e05a45;
+  --color-red-game-dark: #c24632;
+  --color-gold: #f5c542;
 }
 
 * {
@@ -22,9 +24,16 @@
 
 body {
   font-family: var(--font-sans);
-  background: linear-gradient(160deg, #060f1c 0%, #102947 55%, #5a1e18 100%);
   min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
+  background: linear-gradient(135deg, #f8faff 0%, #f2f0ff 50%, #f8faff 100%);
+  background-attachment: fixed;
+  transition: background-color 0.3s ease;
+}
+
+html.dark body {
+  background: linear-gradient(135deg, #0a0a0f 0%, #111118 50%, #0f0a14 100%);
+  background-attachment: fixed;
 }
 
 #root {

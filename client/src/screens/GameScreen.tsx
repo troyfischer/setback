@@ -6,12 +6,18 @@ import { PlayingCard } from '../components/PlayingCard';
 import { useAuth } from '../context/auth';
 import { useGameSubscription } from '../hooks/useGameSubscription';
 import { bidGame, fetchGameState, playCard } from '../lib/api';
-import { formatCard, formatPhase, getCurrentTurnPlayer, getMyHand, normalizeBaseUrl } from '../lib/format';
+import { formatCard, formatPhase, getCurrentTurnPlayer, getMyHand, isCardPlayable, normalizeBaseUrl } from '../lib/format';
 import type { GameEvent, GameStatePlayerScoped, SetbackCard } from '../types/setback';
 
 const BID_OPTIONS = [0, 2, 3, 4] as const;
 
 type SubscriptionStatus = 'idle' | 'connecting' | 'live' | 'error';
+
+const glassPanel = [
+  'rounded-3xl backdrop-blur-xl border shadow-xl flex flex-col gap-4',
+  'bg-white/[0.65] border-white/75 shadow-black/[0.04]',
+  'dark:bg-white/[0.06] dark:border-white/[0.10] dark:shadow-black/50',
+].join(' ');
 
 export function GameScreen() {
   const { accessToken, baseUrl, currentUser } = useAuth();
@@ -85,16 +91,16 @@ export function GameScreen() {
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-5 py-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-black tracking-tight text-white">Setback</h1>
-            <p className="text-sm text-[#d2deee]">Table #{activeGameId} · Connecting…</p>
+            <h1 className="text-2xl font-black tracking-tight text-gray-900 dark:text-white">Setback</h1>
+            <p className="text-sm text-slate-500 dark:text-blue-200/70">Table #{activeGameId} · Connecting…</p>
           </div>
           <div className="flex items-center gap-3">
             <StreamIndicator status={subscription.status} />
             <ActionButton label="Leave" onClick={handleLeaveTable} tone="ghost" />
           </div>
         </div>
-        <div className="rounded-3xl bg-[#fffaf2] p-8 shadow-xl flex items-center justify-center">
-          <p className="text-sm text-[#5c7593]">Waiting for game state…</p>
+        <div className={`${glassPanel} p-8 items-center justify-center`}>
+          <p className="text-sm text-slate-400 dark:text-slate-400/70">Waiting for game state…</p>
         </div>
       </div>
     );
@@ -117,8 +123,8 @@ export function GameScreen() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-white">Setback</h1>
-          <p className="text-sm text-[#d2deee]">
+          <h1 className="text-2xl font-black tracking-tight text-gray-900 dark:text-white">Setback</h1>
+          <p className="text-sm text-slate-500 dark:text-blue-200/70">
             Table #{activeGameId} · {formatPhase(gs.phase)}
           </p>
         </div>
@@ -132,43 +138,43 @@ export function GameScreen() {
       <div className="flex flex-wrap gap-2.5">
         {scoreEntries.length > 0 ? (
           scoreEntries.map(([teamId, score]) => (
-            <div key={teamId} className="flex-1 min-w-[110px] rounded-2xl border border-[rgba(247,215,116,0.4)] bg-[rgba(8,17,32,0.55)] px-4 py-3">
-              <p className="text-xs font-bold uppercase tracking-wide text-[#9fb6d4]">Team {teamId}</p>
-              <p className="mt-1 text-2xl font-extrabold text-white">{score}</p>
+            <div key={teamId} className="flex-1 min-w-[110px] rounded-2xl backdrop-blur-md border px-4 py-3 bg-white/[0.60] border-white/70 dark:bg-white/[0.07] dark:border-gold/20">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-blue-200/70">Team {teamId}</p>
+              <p className="mt-1 text-2xl font-extrabold text-gray-900 dark:text-white">{score}</p>
             </div>
           ))
         ) : (
-          <div className="flex-1 min-w-[110px] rounded-2xl border border-[rgba(247,215,116,0.4)] bg-[rgba(8,17,32,0.55)] px-4 py-3">
-            <p className="text-xs font-bold uppercase tracking-wide text-[#9fb6d4]">Score</p>
-            <p className="mt-1 text-2xl font-extrabold text-white">—</p>
+          <div className="flex-1 min-w-[110px] rounded-2xl backdrop-blur-md border px-4 py-3 bg-white/[0.60] border-white/70 dark:bg-white/[0.07] dark:border-gold/20">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-blue-200/70">Score</p>
+            <p className="mt-1 text-2xl font-extrabold text-gray-900 dark:text-white">—</p>
           </div>
         )}
-        <div className="flex-1 min-w-[110px] rounded-2xl border border-[rgba(247,215,116,0.4)] bg-[rgba(8,17,32,0.55)] px-4 py-3">
-          <p className="text-xs font-bold uppercase tracking-wide text-[#9fb6d4]">Target</p>
-          <p className="mt-1 text-2xl font-extrabold text-white">{gs.max_score}</p>
+        <div className="flex-1 min-w-[110px] rounded-2xl backdrop-blur-md border px-4 py-3 bg-white/[0.60] border-white/70 dark:bg-white/[0.07] dark:border-gold/20">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-blue-200/70">Target</p>
+          <p className="mt-1 text-2xl font-extrabold text-gray-900 dark:text-white">{gs.max_score}</p>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-2xl bg-[rgba(150,45,36,0.94)] px-4 py-3">
-          <p className="text-sm font-semibold text-white">{error}</p>
+        <div className="rounded-2xl border px-4 py-3 bg-red-50 border-red-200/60 dark:bg-red-game/[0.15] dark:border-red-game/25">
+          <p className="text-sm font-semibold text-red-700 dark:text-white">{error}</p>
         </div>
       )}
       {notice && !error && (
-        <div className="rounded-2xl bg-[rgba(31,134,99,0.92)] px-4 py-3">
-          <p className="text-sm font-semibold text-white">{notice}</p>
+        <div className="rounded-2xl border px-4 py-3 bg-emerald-50 border-emerald-200/60 dark:bg-emerald-500/[0.15] dark:border-emerald-500/25">
+          <p className="text-sm font-semibold text-emerald-700 dark:text-white">{notice}</p>
         </div>
       )}
 
       {isComplete ? (
-        <div className="rounded-3xl bg-[#fffaf2] p-8 shadow-2xl flex flex-col items-center gap-5">
-          <span className="text-xs font-extrabold uppercase tracking-[1.6px] text-[#b54434]">Final</span>
-          <h2 className="text-3xl font-extrabold text-[#102947]">Game over</h2>
+        <div className={`${glassPanel} p-8 items-center gap-5`}>
+          <span className="text-xs font-extrabold uppercase tracking-[1.6px] text-red-game">Final</span>
+          <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white">Game over</h2>
           <div className="flex flex-wrap justify-center gap-4">
             {scoreEntries.map(([teamId, score]) => (
-              <div key={teamId} className="flex min-w-[120px] flex-col items-center rounded-2xl bg-[#eff4fa] px-6 py-4">
-                <p className="text-xs font-bold uppercase tracking-wide text-[#5c7593]">Team {teamId}</p>
-                <p className="mt-1.5 text-4xl font-extrabold text-[#102947]">{score}</p>
+              <div key={teamId} className="flex min-w-[120px] flex-col items-center rounded-2xl border px-6 py-4 bg-white/50 border-white/60 dark:bg-white/[0.05] dark:border-white/[0.09]">
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-blue-200/60">Team {teamId}</p>
+                <p className="mt-1.5 text-4xl font-extrabold text-gray-900 dark:text-white">{score}</p>
               </div>
             ))}
           </div>
@@ -177,27 +183,27 @@ export function GameScreen() {
       ) : (
         <>
           {/* Round info + players */}
-          <div className="rounded-3xl bg-[#fffaf2] p-5 shadow-xl flex flex-col gap-5">
+          <div className={`${glassPanel} p-5`}>
             <div className="flex flex-wrap gap-6">
               <div className="flex flex-col gap-1 min-w-[130px]">
-                <p className="text-[11px] font-bold uppercase tracking-wide text-[#5c7593]">Trump</p>
-                <p className="text-xl font-extrabold text-[#102947]">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-blue-200/60">Trump</p>
+                <p className="text-xl font-extrabold text-gray-900 dark:text-white">
                   {trump ? trump.charAt(0).toUpperCase() + trump.slice(1) : 'Not set'}
                 </p>
               </div>
               <div className="flex flex-col gap-1 min-w-[130px]">
-                <p className="text-[11px] font-bold uppercase tracking-wide text-[#5c7593]">Dealer</p>
-                <p className="text-xl font-extrabold text-[#102947]">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-blue-200/60">Dealer</p>
+                <p className="text-xl font-extrabold text-gray-900 dark:text-white">
                   {dealer ? dealer.player_id : '—'}
                 </p>
               </div>
               <div className="flex flex-col gap-1 min-w-[130px]">
-                <p className="text-[11px] font-bold uppercase tracking-wide text-[#5c7593]">Up next</p>
-                <p className="text-xl font-extrabold text-[#102947]">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-blue-200/60">Up next</p>
+                <p className="text-xl font-extrabold text-gray-900 dark:text-white">
                   {currentPlayer ? currentPlayer.player_id : 'Pending'}
                 </p>
                 {yourTurn && (
-                  <p className="text-xs font-extrabold uppercase tracking-wide text-[#b54434]">Your turn</p>
+                  <p className="text-xs font-extrabold uppercase tracking-wide text-red-game">Your turn</p>
                 )}
               </div>
             </div>
@@ -209,14 +215,16 @@ export function GameScreen() {
                   <div
                     key={player.player_id}
                     className={[
-                      'rounded-xl px-3 py-2.5 flex flex-col gap-0.5 transition-colors',
-                      active ? 'bg-[#102947]' : 'bg-[#eff4fa]',
+                      'rounded-xl px-3 py-2.5 flex flex-col gap-0.5 transition-colors border',
+                      active
+                        ? 'bg-navy-800/90 border-navy-600/40 dark:bg-navy-700/70 dark:border-white/10'
+                        : 'bg-white/40 border-white/60 dark:bg-white/[0.04] dark:border-white/[0.07]',
                     ].join(' ')}
                   >
-                    <p className={['text-sm font-bold', active ? 'text-white' : 'text-[#102947]'].join(' ')}>
+                    <p className={['text-sm font-bold', active ? 'text-white' : 'text-gray-900 dark:text-white'].join(' ')}>
                       {player.player_id}
                     </p>
-                    <p className={['text-[11px] font-semibold uppercase', active ? 'text-[#9fb6d4]' : 'text-[#5c7593]'].join(' ')}>
+                    <p className={['text-[11px] font-semibold uppercase', active ? 'text-navy-200/80' : 'text-slate-400 dark:text-blue-200/55'].join(' ')}>
                       Team {player.team_id}
                     </p>
                   </div>
@@ -227,10 +235,10 @@ export function GameScreen() {
 
           {/* Bidding */}
           {gs.phase === 'bid' && (
-            <div className="rounded-3xl bg-[#fffaf2] p-5 shadow-xl flex flex-col gap-4">
+            <div className={`${glassPanel} p-5`}>
               <div>
-                <h3 className="text-base font-extrabold text-[#102947]">Bidding</h3>
-                <p className="mt-0.5 text-sm text-[#5c7593]">
+                <h3 className="text-base font-extrabold text-gray-900 dark:text-white">Bidding</h3>
+                <p className="mt-0.5 text-sm text-slate-500 dark:text-blue-200/65">
                   Pass or bid how many points your team will take this round.
                 </p>
               </div>
@@ -259,8 +267,8 @@ export function GameScreen() {
 
           {/* Current trick */}
           {trick.length > 0 && (
-            <div className="rounded-3xl bg-[#fffaf2] p-5 shadow-xl flex flex-col gap-4">
-              <h3 className="text-base font-extrabold text-[#102947]">Current trick</h3>
+            <div className={`${glassPanel} p-5`}>
+              <h3 className="text-base font-extrabold text-gray-900 dark:text-white">Current trick</h3>
               <RoundActivityTable
                 rows={trick.map((c) => ({
                   player: c.player_id,
@@ -273,10 +281,10 @@ export function GameScreen() {
 
           {/* Hand */}
           {myHand.length > 0 && (
-            <div className="rounded-3xl bg-[#fffaf2] p-5 shadow-xl flex flex-col gap-4">
+            <div className={`${glassPanel} p-5`}>
               <div>
-                <h3 className="text-base font-extrabold text-[#102947]">Your hand</h3>
-                <p className="mt-0.5 text-sm text-[#5c7593]">
+                <h3 className="text-base font-extrabold text-gray-900 dark:text-white">Your hand</h3>
+                <p className="mt-0.5 text-sm text-slate-500 dark:text-blue-200/65">
                   {gs.phase === 'bid'
                     ? 'Review your cards, then pass or bid.'
                     : canPlay
@@ -291,7 +299,7 @@ export function GameScreen() {
                     busy={busyAction === `Play ${formatCard(card)}`}
                     card={card}
                     disabled={!canPlay}
-                    onPress={canPlay ? () => { void handlePlayCard(card); } : undefined}
+                    onPress={canPlay && isCardPlayable(card, myHand, trick, trump) ? () => { void handlePlayCard(card); } : undefined}
                   />
                 ))}
               </div>
@@ -309,7 +317,7 @@ function RoundActivityTable({ rows }: { rows: ActivityRow[] }) {
   return (
     <table className="w-full text-sm">
       <thead>
-        <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-[#5c7593]">
+        <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-400/70">
           <th className="pb-1.5 pr-4">Player</th>
           <th className="pb-1.5 pr-4">Action</th>
           <th className="pb-1.5">Detail</th>
@@ -317,10 +325,10 @@ function RoundActivityTable({ rows }: { rows: ActivityRow[] }) {
       </thead>
       <tbody>
         {rows.map((row, i) => (
-          <tr key={i} className="border-t border-[#dce6f0]">
-            <td className="py-1.5 pr-4 font-semibold text-[#102947]">{row.player}</td>
-            <td className="py-1.5 pr-4 text-[#5c7593]">{row.action}</td>
-            <td className="py-1.5 font-mono font-bold text-[#102947]">{row.detail}</td>
+          <tr key={i} className="border-t border-slate-200/60 dark:border-white/[0.08]">
+            <td className="py-1.5 pr-4 font-semibold text-gray-900 dark:text-white">{row.player}</td>
+            <td className="py-1.5 pr-4 text-slate-500 dark:text-blue-200/60">{row.action}</td>
+            <td className="py-1.5 font-mono font-bold text-gray-900 dark:text-white">{row.detail}</td>
           </tr>
         ))}
       </tbody>
@@ -331,15 +339,15 @@ function RoundActivityTable({ rows }: { rows: ActivityRow[] }) {
 function StreamIndicator({ status }: { status: SubscriptionStatus }) {
   const { color, label } = {
     live: { color: 'bg-emerald-400', label: 'Live' },
-    connecting: { color: 'bg-yellow-300', label: 'Connecting' },
+    connecting: { color: 'bg-yellow-400', label: 'Connecting' },
     error: { color: 'bg-red-400', label: 'Reconnecting' },
-    idle: { color: 'bg-[#8ca3bf]', label: 'Offline' },
+    idle: { color: 'bg-slate-400', label: 'Offline' },
   }[status];
 
   return (
-    <div className="flex items-center gap-1.5 rounded-full bg-[rgba(8,17,32,0.5)] px-3 py-1.5">
+    <div className="flex items-center gap-1.5 rounded-full backdrop-blur-md border px-3 py-1.5 bg-white/60 border-white/70 dark:bg-black/30 dark:border-white/[0.12]">
       <span className={`h-2 w-2 rounded-full ${color}`} />
-      <span className="text-xs font-bold tracking-wide text-[#d2deee]">{label}</span>
+      <span className="text-xs font-bold tracking-wide text-slate-600 dark:text-blue-100/80">{label}</span>
     </div>
   );
 }

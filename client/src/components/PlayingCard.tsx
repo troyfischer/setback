@@ -17,7 +17,7 @@ export function PlayingCard({ busy, card, caption, disabled, onPress }: Props) {
     <div
       className={[
         'flex flex-col items-center justify-center rounded-2xl border',
-        'bg-[#fffaf2] border-[#e5d4b4] shadow-md',
+        'bg-white border-slate-200 shadow-md',
         'min-h-[86px] min-w-[64px] px-3 py-2.5',
         busy ? 'opacity-70' : '',
       ].join(' ')}
@@ -37,6 +37,7 @@ export function PlayingCard({ busy, card, caption, disabled, onPress }: Props) {
 
   return (
     <button
+      data-testid="playing-card"
       disabled={disabled || busy}
       onClick={onPress}
       className={[
