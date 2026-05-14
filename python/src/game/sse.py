@@ -10,8 +10,8 @@ from typing import Any, TypeAlias, TypedDict, final
 
 import redis.asyncio as redis
 
-from src.game.manager import GameState
 from src.game.events import GameEvent
+from src.game.manager import GameState
 from src.game.types import GameId, PlayerId
 from src.logging import new_logger
 
@@ -147,7 +147,7 @@ class ConnectionManager:
                     )
 
 
-class WSMessage(TypedDict):
+class RedisMessage(TypedDict):
     channel: bytes
     data: bytes
     type: str
@@ -214,7 +214,7 @@ class RedisSubscriber:
         finally:
             logger.info("redis subscriber loop exited")
 
-    async def _handle_message(self, message: WSMessage) -> None:
+    async def _handle_message(self, message: RedisMessage) -> None:
         """
         Handle a message from Redis and broadcast to relevant SSE clients.
         """
