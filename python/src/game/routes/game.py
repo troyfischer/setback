@@ -11,7 +11,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ValidationError
-from sqlmodel import col, func, select
+from sqlmodel import Session, col, func, select
 
 from src.auth.jwt import JwtManager
 from src.auth.sso.models import OAuthUser
@@ -56,6 +56,8 @@ async def create_game(request: Request, db: DBSession):
 
     game = Game(owner=user.sub)
     db.add(game)
+    db.flush()
+    db.add(Player(id=user.sub, game_id=game.id))
     db.commit()
     db.refresh(game)
     return game
@@ -186,7 +188,7 @@ async def sse_event_stream(
 ) -> AsyncGenerator[str, None]:
     queue = connection_manager.connect(game_id, player_id)
     try:
-        yield f"retry: {SSE_RETRY_MILLISECONDS}\n\n"
+        yield f"retry: {SSE_RETRY_MILLISECONDS}\n\n"  # Browser EventSource configuration
         while True:
             try:
                 message = await asyncio.wait_for(
@@ -235,7 +237,6 @@ async def create_subscribe_token(
 async def game_subscribe(
     ctx: RequestContext,
     game_id: int,
-    db: DBSession,
     jwt: JwtManager,
     sse_token: str | None = None,
 ):
@@ -260,13 +261,16 @@ async def game_subscribe(
         expected_audience=SSE_AUDIENCE,
     )
 
-    game = db.get(Game, game_id)
-    if not game:
-        raise HTTPException(404, "Game not found")
+    # Use a short-lived session for validation so we don't hold a pool
+    # connection for the lifetime of the SSE stream.
+    with Session(ctx.db) as db:
+        game = db.get(Game, game_id)
+        if not game:
+            raise HTTPException(404, "Game not found")
 
-    player = db.get(Player, (claims["sub"], game_id))
-    if not player:
-        raise HTTPException(403, "not an active player in game")
+        player = db.get(Player, (claims["sub"], game_id))
+        if not player:
+            raise HTTPException(403, "not an active player in game")
 
     return StreamingResponse(
         sse_event_stream(game_id, claims["sub"], ctx.cm),
