@@ -683,9 +683,9 @@ class GameManager:
     def bid_game(self, game: Game, player: Player, bid: BidRequest) -> GameState:
         with self._game_state_context(game, Phase.BID, player.id) as gs:
             gs.process_bid(Bid(amount=bid.amount, player_id=player.id))
-            self._publish_event("bid_placed", gs)
             if gs.active_round.bid.is_complete:
                 gs.next_phase()
+            self._publish_event("bid_placed", gs)
         return gs
 
     def play_card(self, game: Game, player: Player, card: SetbackCard) -> GameState:
