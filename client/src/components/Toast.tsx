@@ -33,7 +33,8 @@ function Toast({ toast, onDismiss }: Props) {
     };
   }, [toast.id, onDismiss]);
 
-  const base = "rounded-2xl border px-4 py-3 shadow-lg transition-all duration-200 ease-out min-w-[220px] max-w-sm";
+  const base =
+    "rounded-2xl border px-4 py-3 shadow-lg transition-all duration-200 ease-out min-w-[220px] max-w-sm";
   const colors =
     toast.kind === "error"
       ? "bg-red-50 border-red-200/60 dark:bg-red-game/[0.95] dark:border-red-game/40"

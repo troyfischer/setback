@@ -12,13 +12,19 @@ test("owner can create a game and see join code", async ({ page }) => {
   await expect(page.getByText(/share this join code/i)).toBeVisible();
 });
 
-test("owner sees delete game button after creating a game", async ({ page }) => {
+test("owner sees delete game button after creating a game", async ({
+  page,
+}) => {
   await devLogin(page, `owner-${Date.now()}`);
   await page.getByRole("button", { name: /create game/i }).click();
-  await expect(page.getByRole("button", { name: /delete game/i })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /delete game/i }),
+  ).toBeVisible();
 });
 
-test("second player can join via code and both see the lobby", async ({ browser }) => {
+test("second player can join via code and both see the lobby", async ({
+  browser,
+}) => {
   const ownerCtx = await browser.newContext();
   const memberCtx = await browser.newContext();
   const ownerPage: Page = await ownerCtx.newPage();

@@ -115,7 +115,9 @@ export default function App() {
     }
 
     void poll();
-    const id = setInterval(() => { void poll(); }, 3000);
+    const id = setInterval(() => {
+      void poll();
+    }, 3000);
     return () => {
       cancelled = true;
       clearInterval(id);
@@ -262,12 +264,16 @@ export default function App() {
       const trimmed = joinCode.trim();
       const separatorIdx = trimmed.indexOf("-");
       if (separatorIdx === -1) {
-        throw new Error("Invalid join code. Paste the full code your host shared.");
+        throw new Error(
+          "Invalid join code. Paste the full code your host shared.",
+        );
       }
       const gameId = Number.parseInt(trimmed.slice(0, separatorIdx), 10);
       const secret = trimmed.slice(separatorIdx + 1);
       if (!Number.isInteger(gameId) || !secret) {
-        throw new Error("Invalid join code. Paste the full code your host shared.");
+        throw new Error(
+          "Invalid join code. Paste the full code your host shared.",
+        );
       }
 
       await joinGame(normalizedBaseUrl, accessToken, {
@@ -449,7 +455,9 @@ export default function App() {
             lobbyState={lobbyState}
             notice={notice}
             onChangeJoinCode={setJoinCode}
-            onChangeTeamId={(value) => setTeamInput((prev) => ({ ...prev, number: value }))}
+            onChangeTeamId={(value) =>
+              setTeamInput((prev) => ({ ...prev, number: value }))
+            }
             onCreateGame={() => {
               void handleCreateGame();
             }}

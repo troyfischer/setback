@@ -54,7 +54,12 @@ export function LobbyScreen() {
   const [lobbyState, setLobbyState] = useState<LobbyState | null>(null);
   const [activeGames, setActiveGames] = useState<GameRecord[]>([]);
   const [busyAction, setBusyAction] = useState<string | null>(null);
-  const { toasts, dismissToast, notice: pushNotice, error: pushError } = useToasts();
+  const {
+    toasts,
+    dismissToast,
+    notice: pushNotice,
+    error: pushError,
+  } = useToasts();
 
   const inTable = Boolean(activeGameId);
   const shareCode =

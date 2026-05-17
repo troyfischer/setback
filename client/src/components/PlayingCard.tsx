@@ -1,5 +1,5 @@
-import { formatCard } from '../lib/format';
-import type { SetbackCard } from '../types/setback';
+import { formatCard } from "../lib/format";
+import type { SetbackCard } from "../types/setback";
 
 type Props = {
   busy?: boolean;
@@ -10,19 +10,24 @@ type Props = {
 };
 
 export function PlayingCard({ busy, card, caption, disabled, onPress }: Props) {
-  const isRed = card.suit === 'heart' || card.suit === 'diamond';
+  const isRed = card.suit === "heart" || card.suit === "diamond";
   const label = formatCard(card);
 
   const inner = (
     <div
       className={[
-        'flex flex-col items-center justify-center rounded-2xl border',
-        'bg-white border-slate-200 shadow-md',
-        'min-h-[86px] min-w-[64px] px-3 py-2.5',
-        busy ? 'opacity-70' : '',
-      ].join(' ')}
+        "flex flex-col items-center justify-center rounded-2xl border",
+        "bg-white border-slate-200 shadow-md",
+        "min-h-[86px] min-w-[64px] px-3 py-2.5",
+        busy ? "opacity-70" : "",
+      ].join(" ")}
     >
-      <span className={['text-2xl font-extrabold tracking-wide', isRed ? 'text-[#b43c2a]' : 'text-[#0d1d31]'].join(' ')}>
+      <span
+        className={[
+          "text-2xl font-extrabold tracking-wide",
+          isRed ? "text-[#b43c2a]" : "text-[#0d1d31]",
+        ].join(" ")}
+      >
         {label}
       </span>
       {caption && (
@@ -41,11 +46,11 @@ export function PlayingCard({ busy, card, caption, disabled, onPress }: Props) {
       disabled={disabled || busy}
       onClick={onPress}
       className={[
-        'transition-transform duration-100',
-        'hover:scale-105 active:scale-95',
-        'disabled:opacity-45 disabled:cursor-not-allowed disabled:scale-100',
-        'cursor-pointer',
-      ].join(' ')}
+        "transition-transform duration-100",
+        "hover:scale-105 active:scale-95",
+        "disabled:opacity-45 disabled:cursor-not-allowed disabled:scale-100",
+        "cursor-pointer",
+      ].join(" ")}
     >
       {inner}
     </button>

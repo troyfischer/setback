@@ -62,7 +62,12 @@ async function playGame(browser: Browser, teams: string[][]) {
   // --- Play until "Game over" ---
   async function findActivePlayer(): Promise<Page | null> {
     const results = await Promise.all(
-      allPages.map((p) => p.locator("text=Your turn").isVisible().catch(() => false))
+      allPages.map((p) =>
+        p
+          .locator("text=Your turn")
+          .isVisible()
+          .catch(() => false),
+      ),
     );
     const idx = results.findIndex((v) => v);
     return idx >= 0 ? allPages[idx]! : null;

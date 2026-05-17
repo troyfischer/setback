@@ -103,7 +103,7 @@ def test_health_check(client: httpx.Client):
 
 def test_create_users(authenticated_users: dict[str, str]):
     assert len(authenticated_users) == len(USERS)
-    for user, token in authenticated_users.items():
+    for _user, token in authenticated_users.items():
         assert token is not None
         assert len(token) > 0
 

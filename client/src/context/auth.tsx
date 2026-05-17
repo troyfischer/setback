@@ -1,9 +1,15 @@
-import { createContext, startTransition, useContext, useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
+import {
+  createContext,
+  startTransition,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
+import type { ReactNode } from "react";
 
-import { fetchMe, refreshAccessToken } from '../lib/api';
-import { getDefaultApiBaseUrl, normalizeBaseUrl } from '../lib/format';
-import type { CurrentUser } from '../types/setback';
+import { fetchMe, refreshAccessToken } from "../lib/api";
+import { getDefaultApiBaseUrl, normalizeBaseUrl } from "../lib/format";
+import type { CurrentUser } from "../types/setback";
 
 type AuthContextValue = {
   accessToken: string;
@@ -19,7 +25,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
-  const [accessToken, setAccessToken] = useState('');
+  const [accessToken, setAccessToken] = useState("");
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [baseUrl, setBaseUrl] = useState(getDefaultApiBaseUrl());
 
@@ -43,12 +49,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     void resume();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
-    <AuthContext.Provider value={{ accessToken, baseUrl, currentUser, hydrated, setAccessToken, setBaseUrl, setCurrentUser }}>
+    <AuthContext.Provider
+      value={{
+        accessToken,
+        baseUrl,
+        currentUser,
+        hydrated,
+        setAccessToken,
+        setBaseUrl,
+        setCurrentUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -56,6 +74,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }

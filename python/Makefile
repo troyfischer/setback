@@ -36,7 +36,7 @@ clean:
 	docker system prune -f
 
 lint:
-	uv run ruff check src tests
+	uv run ruff check --fix src tests
 
 format:
 	uv run ruff format src tests

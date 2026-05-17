@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from "react";
 
-import { createSubscribeToken } from '../lib/api';
-import { normalizeBaseUrl } from '../lib/format';
-import type { GameEvent } from '../types/setback';
+import { createSubscribeToken } from "../lib/api";
+import { normalizeBaseUrl } from "../lib/format";
+import type { GameEvent } from "../types/setback";
 
 type Params = {
   accessToken: string;
@@ -15,7 +15,7 @@ type Params = {
 
 type SubscriptionState = {
   detail: string | null;
-  status: 'idle' | 'connecting' | 'live' | 'error';
+  status: "idle" | "connecting" | "live" | "error";
 };
 
 export function useGameSubscription({
@@ -26,7 +26,7 @@ export function useGameSubscription({
   onError,
   onEvent,
 }: Params): SubscriptionState {
-  const [status, setStatus] = useState<SubscriptionState['status']>('idle');
+  const [status, setStatus] = useState<SubscriptionState["status"]>("idle");
   const [detail, setDetail] = useState<string | null>(null);
   const onEventRef = useRef(onEvent);
   const onErrorRef = useRef(onError);
@@ -38,7 +38,7 @@ export function useGameSubscription({
 
   useEffect(() => {
     if (!enabled || !gameId || !accessToken) {
-      setStatus('idle');
+      setStatus("idle");
       setDetail(null);
       return;
     }
@@ -59,7 +59,7 @@ export function useGameSubscription({
     function scheduleReconnect(reason: string) {
       if (cancelled) return;
       teardown();
-      setStatus('error');
+      setStatus("error");
       setDetail(reason);
       onErrorRef.current?.(reason);
       reconnectTimer = setTimeout(() => {
@@ -71,23 +71,27 @@ export function useGameSubscription({
     function handlePayload(payload: string) {
       try {
         const parsed = JSON.parse(payload) as GameEvent;
-        setStatus('live');
-        setDetail('Receiving live updates');
+        setStatus("live");
+        setDetail("Receiving live updates");
         onEventRef.current(parsed);
       } catch {
-        scheduleReconnect('Received an invalid SSE payload.');
+        scheduleReconnect("Received an invalid SSE payload.");
       }
     }
 
     async function connect() {
-      setStatus('connecting');
+      setStatus("connecting");
       setDetail(`Connecting to game ${gameId}...`);
 
       try {
         const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
         if (!gameId) return;
 
-        const token = await createSubscribeToken(normalizedBaseUrl, accessToken, gameId);
+        const token = await createSubscribeToken(
+          normalizedBaseUrl,
+          accessToken,
+          gameId,
+        );
         if (cancelled) return;
 
         const streamUrl = `${normalizedBaseUrl}/game/${gameId}/subscribe?sse_token=${encodeURIComponent(token.sse_token)}`;
@@ -95,8 +99,8 @@ export function useGameSubscription({
         source = es;
 
         es.onopen = () => {
-          setStatus('live');
-          setDetail('Stream connected');
+          setStatus("live");
+          setDetail("Stream connected");
         };
 
         es.onmessage = (event) => {
@@ -104,11 +108,13 @@ export function useGameSubscription({
         };
 
         es.onerror = () => {
-          scheduleReconnect('The live stream disconnected.');
+          scheduleReconnect("The live stream disconnected.");
         };
       } catch (caught) {
         const message =
-          caught instanceof Error ? caught.message : 'Unable to connect to the live stream.';
+          caught instanceof Error
+            ? caught.message
+            : "Unable to connect to the live stream.";
         scheduleReconnect(message);
       }
     }

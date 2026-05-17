@@ -195,7 +195,8 @@ async def sse_event_stream(
 ) -> AsyncGenerator[str, None]:
     queue = connection_manager.connect(game_id, player_id)
     try:
-        yield f"retry: {SSE_RETRY_MILLISECONDS}\n\n"  # Browser EventSource configuration
+        # Browser EventSource retry configuration
+        yield f"retry: {SSE_RETRY_MILLISECONDS}\n\n"
         while True:
             try:
                 message = await asyncio.wait_for(

@@ -81,7 +81,9 @@ def print_first_line():
 
 
 @pytest.fixture
-def game(client: TestClient, authenticated_users: dict[str, str]) -> Generator[Game, None, None]:
+def game(
+    client: TestClient, authenticated_users: dict[str, str]
+) -> Generator[Game, None, None]:
     g = create_game(client, authenticated_users[USERS[0]])
     yield g
     delete_game(client, authenticated_users[USERS[0]], g.id)

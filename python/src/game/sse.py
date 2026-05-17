@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import ItemsView
-from typing import Any, TypeAlias, TypedDict, final
+from typing import Any, TypedDict, final
 
 import redis.asyncio as redis
 
@@ -18,7 +18,7 @@ from src.logging import new_logger
 logger = new_logger(__name__)
 
 
-ClientQueue: TypeAlias = asyncio.Queue[dict[str, Any]]
+type ClientQueue = asyncio.Queue[dict[str, Any]]
 
 
 class GameSubscribers:

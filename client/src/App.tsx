@@ -1,19 +1,21 @@
-import type { ReactNode } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import type { ReactNode } from "react";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
-import { ThemeToggle } from './components/ThemeToggle';
-import { AuthProvider, useAuth } from './context/auth';
-import { useTheme } from './hooks/useTheme';
-import { GameScreen } from './screens/GameScreen';
-import { LobbyScreen } from './screens/LobbyScreen';
-import { WelcomeScreen } from './screens/WelcomeScreen';
+import { ThemeToggle } from "./components/ThemeToggle";
+import { AuthProvider, useAuth } from "./context/auth";
+import { useTheme } from "./hooks/useTheme";
+import { GameScreen } from "./screens/GameScreen";
+import { LobbyScreen } from "./screens/LobbyScreen";
+import { WelcomeScreen } from "./screens/WelcomeScreen";
 
 function LoadingSpinner() {
   return (
     <div className="flex min-h-dvh items-center justify-center">
       <div className="flex flex-col items-center gap-4">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-gold border-t-transparent" />
-        <p className="text-sm font-semibold text-slate-400 dark:text-blue-200/70">Shuffling the deck…</p>
+        <p className="text-sm font-semibold text-slate-400 dark:text-blue-200/70">
+          Shuffling the deck…
+        </p>
       </div>
     </div>
   );
@@ -43,9 +45,30 @@ function AppContent() {
       </div>
       <Routes>
         <Route path="/" element={<RootRoute />} />
-        <Route path="/lobby" element={<ProtectedRoute><LobbyScreen /></ProtectedRoute>} />
-        <Route path="/lobby/:gameId" element={<ProtectedRoute><LobbyScreen /></ProtectedRoute>} />
-        <Route path="/game/:gameId" element={<ProtectedRoute><GameScreen /></ProtectedRoute>} />
+        <Route
+          path="/lobby"
+          element={
+            <ProtectedRoute>
+              <LobbyScreen />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/lobby/:gameId"
+          element={
+            <ProtectedRoute>
+              <LobbyScreen />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/game/:gameId"
+          element={
+            <ProtectedRoute>
+              <GameScreen />
+            </ProtectedRoute>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>

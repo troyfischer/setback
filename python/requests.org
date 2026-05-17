@@ -1,5 +1,5 @@
 #+title: Requests
-#+PROPERTY: host localhost:80
+#+PROPERTY: host 0.0.0.0:80
 
 * Token
 :PROPERTIES:
@@ -51,6 +51,13 @@ GET ${redirect}
 GET /health
 Authorization: Bearer ${token}
 #+end_src
+
+#+RESULTS:
+#+begin_example json
+{
+  "status": "healthy"
+}
+#+end_example
 
 ** Games
 *** Create
