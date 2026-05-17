@@ -1,7 +1,6 @@
 import type {
   BidRequest,
   CurrentUser,
-  GameManagementRequest,
   GameRecord,
   GameRequest,
   GameStatePlayerScoped,
@@ -97,7 +96,7 @@ export async function createGame(baseUrl: string, token: string) {
 export async function joinGame(
   baseUrl: string,
   token: string,
-  request: GameManagementRequest,
+  request: GameRequest,
 ) {
   return requestJson(`${baseUrl}/game/join`, {
     body: JSON.stringify(request),
@@ -172,7 +171,7 @@ export async function deleteTeam(
 export async function fetchLobbyState(
   baseUrl: string,
   token: string,
-  gameId: number,
+  gameId: string,
 ) {
   return requestJson<LobbyState>(`${baseUrl}/game/${gameId}/lobby`, {
     headers: withBearer(token),
@@ -228,7 +227,7 @@ export async function playCard(
 export async function fetchGameState(
   baseUrl: string,
   token: string,
-  gameId: number,
+  gameId: string,
 ) {
   return requestJson<GameStatePlayerScoped>(`${baseUrl}/game/${gameId}/state`, {
     headers: withBearer(token),
@@ -261,7 +260,7 @@ export async function fetchUserRelevantGames(baseUrl: string, token: string) {
 export async function createSubscribeToken(
   baseUrl: string,
   token: string,
-  gameId: number,
+  gameId: string,
 ) {
   return requestJson<SubscribeTokenResponse>(
     `${baseUrl}/game/${gameId}/subscribe-token`,

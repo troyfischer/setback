@@ -19,19 +19,18 @@ export type CurrentUser = {
 
 export type GameRecord = {
   created_at: string;
-  id: number;
-  join_code: string;
+  id: string;
   owner: string;
   status: GameStatus;
 };
 
 export type PlayerRecord = {
-  game_id: number;
+  game_id: string;
   id: string;
 };
 
 export type TeamRecord = {
-  game_id: number;
+  game_id: string;
   id: number;
   owner: string;
   team_number: number;
@@ -51,7 +50,7 @@ export type LobbyState = {
 };
 
 export type TeamMemberRecord = {
-  game_id: number;
+  game_id: string;
   player_id: string;
   team_id: number;
 };
@@ -83,7 +82,7 @@ export type BidAction = {
 
 export type TurnCollection<T> = {
   collection: T[];
-  game_id: number;
+  game_id: string;
   turn: ModIndex;
 };
 
@@ -97,7 +96,7 @@ export type RoundScore = {
 export type GameRoundPlayerScoped = {
   bid: TurnCollection<BidAction>;
   dealer: ModIndex;
-  game_id: number;
+  game_id: string;
   hand: SetbackCard[];
   player_id: string;
   score: RoundScore | null;
@@ -118,7 +117,7 @@ export type PlayerOrder = {
 
 export type GameStatePlayerScoped = {
   active_round: GameRoundPlayerScoped;
-  game_id: number;
+  game_id: string;
   max_score: number;
   order: PlayerOrder;
   phase: Phase;
@@ -136,15 +135,11 @@ export type GameEvent = {
     | "round_complete"
     | "state_update"
     | "trick_won";
-  game_id: number;
+  game_id: string;
 };
 
 export type GameRequest = {
-  game_id: number;
-};
-
-export type GameManagementRequest = GameRequest & {
-  secret: string;
+  game_id: string;
 };
 
 export type UpdateTeamRequest = GameRequest & {

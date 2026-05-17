@@ -8,7 +8,7 @@ type Params = {
   accessToken: string;
   baseUrl: string;
   enabled: boolean;
-  gameId: number | null;
+  gameId: string | null;
   onError?: (message: string) => void;
   onEvent: (event: GameEvent) => void;
 };

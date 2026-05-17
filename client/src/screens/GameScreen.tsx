@@ -24,7 +24,7 @@ export function GameScreen() {
   const { gameId: gameIdParam } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
 
-  const activeGameId = gameIdParam ? Number.parseInt(gameIdParam, 10) : null;
+  const activeGameId = gameIdParam ?? null;
 
   const [gameState, setGameState] = useState<GameStatePlayerScoped | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -92,7 +92,7 @@ export function GameScreen() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-black tracking-tight text-gray-900 dark:text-white">Setback</h1>
-            <p className="text-sm text-slate-500 dark:text-blue-200/70">Table #{activeGameId} · Connecting…</p>
+            <p className="text-sm text-slate-500 dark:text-blue-200/70">Connecting…</p>
           </div>
           <div className="flex items-center gap-3">
             <StreamIndicator status={subscription.status} />
@@ -125,7 +125,7 @@ export function GameScreen() {
         <div>
           <h1 className="text-2xl font-black tracking-tight text-gray-900 dark:text-white">Setback</h1>
           <p className="text-sm text-slate-500 dark:text-blue-200/70">
-            Table #{activeGameId} · {formatPhase(gs.phase)}
+            {formatPhase(gs.phase)}
           </p>
         </div>
         <div className="flex items-center gap-3">
