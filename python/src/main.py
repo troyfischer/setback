@@ -36,7 +36,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         @event.listens_for(engine, "connect")
         def set_sqlite_pragma(conn: Connection, _: object) -> None:
-            conn.execute(text("PRAGMA foreign_keys=ON"))
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
 
     SQLModel.metadata.create_all(engine)
     app.state.db_engine = engine

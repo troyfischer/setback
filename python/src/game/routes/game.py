@@ -134,11 +134,6 @@ def start_game(
     game: Annotated[Game, Depends(require_owner)],
     user: Annotated[OAuthUser, Depends(get_current_user)],
 ) -> GameStatePlayerScoped:
-    # TODO:
-    # 1. ensure at least X teams
-    # 2. ensure no empty teams
-    # 3. ensure minimum players
-
     game_state = ctx.gm.start_game(game)
 
     game.status = GameStatus.ACTIVE

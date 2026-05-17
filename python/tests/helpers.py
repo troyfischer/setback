@@ -8,7 +8,6 @@ from src.game.manager import Dealer, GameStatePlayerScoped, Phase
 from src.game.models import (
     BidRequest,
     Game,
-    GameManagementRequest,
     GameRequest,
     PlayCardRequest,
     Team,
@@ -61,10 +60,7 @@ def join_game(
         res = client.post(
             "/game/join",
             headers={"Authorization": f"Bearer {authenticated_users[user]}"},
-            json=GameManagementRequest(
-                game_id=game.id,
-                secret=game.join_code,
-            ).model_dump(),
+            json=GameRequest(game_id=game.id).model_dump(),
         )
         assert res.status_code == HTTPStatus.OK, (
             f"User {user} failed to join: {res.text}"

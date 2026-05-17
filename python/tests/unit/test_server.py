@@ -33,6 +33,7 @@ from tests.helpers import (
     play_trick,
     start_game,
 )
+from src.game.models import GameRequest, UpdateTeamRequest
 
 pytestmark = pytest.mark.unit
 
@@ -315,7 +316,7 @@ def test_sse_event_stream_emits_keepalive_then_data():
 
         await cm.broadcast_to_game(
             42,
-            GameEvent(event_type="bid_placed", game_id=42, data={"ok": True}),
+            GameEvent(event_type="bid_placed", game_id="42", data={"ok": True}),
         )
         data_line = await anext(stream)
 
@@ -332,21 +333,140 @@ def test_sse_event_stream_emits_keepalive_then_data():
 def test_sse_connection_manager_drops_oldest_message_when_queue_is_full():
     async def consume() -> dict[str, object]:
         cm = ConnectionManager(max_queue_size=1)
-        queue = cm.connect(100, "player-a")
+        queue = cm.connect("100", "player-a")
 
         await cm.broadcast_to_game(
-            100,
-            GameEvent(event_type="bid_placed", game_id=100, data={"tag": "first"}),
+            "100",
+            GameEvent(event_type="bid_placed", game_id="100", data={"tag": "first"}),
         )
         await cm.broadcast_to_game(
-            100,
-            GameEvent(event_type="card_played", game_id=100, data={"tag": "second"}),
+            "100",
+            GameEvent(event_type="card_played", game_id="100", data={"tag": "second"}),
         )
 
         message = await queue.get()
-        cm.disconnect(100, "player-a", queue)
+        cm.disconnect("100", "player-a", queue)
         return message
 
     msg = asyncio.run(consume())
     assert msg["event_type"] == "card_played"
     assert msg["data"]["tag"] == "second"
+
+
+def _start_game_request(client, token, game_id):
+    return client.post(
+        "/game/start",
+        headers={"Authorization": f"Bearer {token}"},
+        json=GameRequest(game_id=game_id).model_dump(),
+    )
+
+
+def test_cannot_start_game_with_no_teams(
+    client: TestClient,
+    authenticated_users: dict[str, str],
+    game: Game,
+):
+    res = _start_game_request(client, authenticated_users[USERS[0]], game.id)
+    assert res.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_cannot_start_game_with_one_team(
+    client: TestClient,
+    authenticated_users: dict[str, str],
+    game: Game,
+):
+    client.post(
+        "/team/create",
+        headers={"Authorization": f"Bearer {authenticated_users[USERS[0]]}"},
+        json=GameRequest(game_id=game.id).model_dump(),
+    )
+    res = _start_game_request(client, authenticated_users[USERS[0]], game.id)
+    assert res.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_cannot_start_game_with_empty_team(
+    client: TestClient,
+    authenticated_users: dict[str, str],
+    game: Game,
+):
+    join_game(client, authenticated_users, game, [USERS[1]])
+
+    # user0 creates team A and then leaves it, leaving it empty
+    team_res = client.post(
+        "/team/create",
+        headers={"Authorization": f"Bearer {authenticated_users[USERS[0]]}"},
+        json=GameRequest(game_id=game.id).model_dump(),
+    )
+    team_a = Team.model_validate(team_res.json())
+    client.post(
+        "/team/leave",
+        headers={"Authorization": f"Bearer {authenticated_users[USERS[0]]}"},
+        json=UpdateTeamRequest(game_id=game.id, team_number=team_a.team_number).model_dump(),
+    )
+
+    # user1 creates team B (auto-joins)
+    client.post(
+        "/team/create",
+        headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
+        json=GameRequest(game_id=game.id).model_dump(),
+    )
+
+    res = _start_game_request(client, authenticated_users[USERS[0]], game.id)
+    assert res.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_cannot_start_game_with_unequal_teams(
+    client: TestClient,
+    authenticated_users: dict[str, str],
+    game: Game,
+):
+    join_game(client, authenticated_users, game, [USERS[1], USERS[2]])
+
+    # user0 creates team A (auto-joins: A=[user0])
+    team_res = client.post(
+        "/team/create",
+        headers={"Authorization": f"Bearer {authenticated_users[USERS[0]]}"},
+        json=GameRequest(game_id=game.id).model_dump(),
+    )
+    team_a = Team.model_validate(team_res.json())
+
+    # user1 creates team B (auto-joins: B=[user1])
+    client.post(
+        "/team/create",
+        headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
+        json=GameRequest(game_id=game.id).model_dump(),
+    )
+
+    # user2 joins team A → A=[user0, user2], B=[user1] (unequal)
+    client.post(
+        "/team/join",
+        headers={"Authorization": f"Bearer {authenticated_users[USERS[2]]}"},
+        json=UpdateTeamRequest(game_id=game.id, team_number=team_a.team_number).model_dump(),
+    )
+
+    res = _start_game_request(client, authenticated_users[USERS[0]], game.id)
+    assert res.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_cannot_start_game_with_fewer_than_four_players(
+    client: TestClient,
+    authenticated_users: dict[str, str],
+    game: Game,
+):
+    join_game(client, authenticated_users, game, [USERS[1]])
+
+    # user0 creates team A (auto-joins: A=[user0])
+    client.post(
+        "/team/create",
+        headers={"Authorization": f"Bearer {authenticated_users[USERS[0]]}"},
+        json=GameRequest(game_id=game.id).model_dump(),
+    )
+    # user1 creates team B (auto-joins: B=[user1]) → 2 teams of 1 = 2 players total
+    client.post(
+        "/team/create",
+        headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
+        json=GameRequest(game_id=game.id).model_dump(),
+    )
+
+    res = _start_game_request(client, authenticated_users[USERS[0]], game.id)
+    assert res.status_code == HTTPStatus.BAD_REQUEST

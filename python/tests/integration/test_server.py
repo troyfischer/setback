@@ -116,7 +116,6 @@ def game(client: httpx.Client, authenticated_users: dict[str, str]) -> Game:
 
 def test_create_game(game: Game):
     assert game.id is not None
-    assert game.join_code is not None
 
 
 @pytest.fixture(scope="module")

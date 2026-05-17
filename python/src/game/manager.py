@@ -35,6 +35,7 @@ from src.logging import new_logger
 
 """
 TODO: dealer can steal the bid if a player before passes and it is at least 2
+I don't think the Bradley's play this way...
 """
 
 
@@ -395,12 +396,6 @@ class _GameState(GameModel):
     score: dict[TeamId, int]
     order: PlayerOrder
 
-    def check_playable(self) -> None:
-        if not self.order.order:
-            raise InvalidGameStateException(
-                f"game {self.game_id} does not have any players"
-            )
-
 
 class GameState(_GameState):
     rounds: list[GameRound] = Field(default_factory=list)
@@ -600,6 +595,24 @@ class GameManager:
                 for member in members:
                     member_map[team.id].append(member)
 
+        if len(teams) < 2:
+            raise InvalidGameStateException("game requires at least 2 teams")
+
+        for team in teams:
+            if not member_map[team.id]:
+                raise InvalidGameStateException(
+                    f"team {team.team_number} has no members"
+                )
+
+        team_sizes = [len(member_map[team.id]) for team in teams]
+        if len(set(team_sizes)) > 1:
+            raise InvalidGameStateException(
+                "all teams must have equal numbers of players"
+            )
+
+        if sum(team_sizes) < 4:
+            raise InvalidGameStateException("game requires at least 4 players")
+
         order: list[TeamMember] = []
         for grouped_team in zip(*member_map.values(), strict=True):
             order.extend(grouped_team)
@@ -622,8 +635,6 @@ class GameManager:
             score={team.id: 0 for team in teams},
             active_round=GameRound.new_round(game.id, len(order)),
         )
-
-        gs.check_playable()  # raises if not playable
 
         self._save_state(gs)
         self._publish_event("game_started", gs)

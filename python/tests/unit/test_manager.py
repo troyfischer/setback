@@ -80,12 +80,12 @@ class TestTrick:
 
     @pytest.fixture
     def empty_trick(self):
-        return Trick(game_id=1, turn=ModIdx(idx=0, mod=1))
+        return Trick(game_id="1", turn=ModIdx(idx=0, mod=1))
 
     @pytest.fixture
     def populated_trick(self):
         return Trick(
-            game_id=1,
+            game_id="1",
             turn=ModIdx(idx=0, mod=1),
             collection=[PlayedCard(value=2, suit=self.NON_TRUMP_SUIT, player_id="1")],
         )
@@ -159,13 +159,13 @@ class TestTrick:
         "trick,trump,expected",
         [
             (
-                Trick(game_id=1, turn=ModIdx(idx=0, mod=1)),
+                Trick(game_id="1", turn=ModIdx(idx=0, mod=1)),
                 TRUMP_SUIT,
                 InvalidGameStateException,
             ),
             (
                 Trick(
-                    game_id=1,
+                    game_id="1",
                     turn=ModIdx(idx=0, mod=1),
                     collection=[PlayedCard(value=2, suit=TRUMP_SUIT, player_id="1")],
                 ),
@@ -174,7 +174,7 @@ class TestTrick:
             ),
             (
                 Trick(
-                    game_id=1,
+                    game_id="1",
                     turn=ModIdx(idx=0, mod=1),
                     collection=[
                         PlayedCard(value=2, suit=NON_TRUMP_SUIT, player_id="1")
@@ -199,12 +199,12 @@ class TestBidRound:
         "bid_round,expected",
         [
             (
-                BidRound(game_id=1, turn=ModIdx(idx=0, mod=1)),
+                BidRound(game_id="1", turn=ModIdx(idx=0, mod=1)),
                 InvalidGameStateException,
             ),
             (
                 BidRound(
-                    game_id=1,
+                    game_id="1",
                     turn=ModIdx(idx=0, mod=1),
                     collection=[Bid(amount=2, player_id="1")],
                 ),
@@ -212,7 +212,7 @@ class TestBidRound:
             ),
             (
                 BidRound(
-                    game_id=1,
+                    game_id="1",
                     turn=ModIdx(idx=0, mod=1),
                     collection=[
                         Bid(amount=2, player_id="1"),
@@ -234,7 +234,7 @@ class TestBidRound:
 
 TEAM_A = 1
 TEAM_B = 2
-GAME_ID = 1
+GAME_ID = "1"
 
 
 @dataclass
@@ -302,8 +302,8 @@ class TestBasics(TestGameRound):
         [
             (GameRoundConfig(trick=None), InvalidGameStateException),
             (
-                GameRoundConfig(trick=Trick(game_id=1, turn=ModIdx(idx=0, mod=3))),
-                Trick(game_id=1, turn=ModIdx(idx=0, mod=3)),
+                GameRoundConfig(trick=Trick(game_id="1", turn=ModIdx(idx=0, mod=3))),
+                Trick(game_id="1", turn=ModIdx(idx=0, mod=3)),
             ),
         ],
         indirect=["gr"],
