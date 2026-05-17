@@ -2,7 +2,9 @@ import { startTransition, useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { ActionButton } from "../components/ActionButton";
+import { ToastContainer } from "../components/Toast";
 import { useAuth } from "../context/auth";
+import { useToasts } from "../hooks/useToasts";
 import {
   createGame,
   createTeam,
@@ -45,21 +47,18 @@ export function LobbyScreen() {
   const { gameId: gameIdParam } = useParams<{ gameId?: string }>();
   const navigate = useNavigate();
 
-  const activeGameId = gameIdParam ? Number.parseInt(gameIdParam, 10) : null;
+  const activeGameId = gameIdParam ?? null;
 
   const [joinCode, setJoinCode] = useState("");
   const [createdGame, setCreatedGame] = useState<GameRecord | null>(null);
   const [lobbyState, setLobbyState] = useState<LobbyState | null>(null);
   const [activeGames, setActiveGames] = useState<GameRecord[]>([]);
   const [busyAction, setBusyAction] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { toasts, dismissToast, notice: pushNotice, error: pushError } = useToasts();
 
   const inTable = Boolean(activeGameId);
   const shareCode =
-    createdGame?.join_code && createdGame.id === activeGameId
-      ? `${createdGame.id}-${createdGame.join_code}`
-      : null;
+    createdGame && createdGame.id === activeGameId ? createdGame.id : null;
   const displayName =
     currentUser?.given_name ||
     currentUser?.name ||
@@ -114,12 +113,10 @@ export function LobbyScreen() {
 
   async function runAction(label: string, action: () => Promise<void>) {
     setBusyAction(label);
-    setError(null);
-    setNotice(null);
     try {
       await action();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unknown error");
+      pushError(caught instanceof Error ? caught.message : "Unknown error");
     } finally {
       setBusyAction(null);
     }
@@ -145,16 +142,11 @@ export function LobbyScreen() {
     await runAction("Create game", async () => {
       const url = normalizeBaseUrl(baseUrl);
       const game = await createGame(url, accessToken);
-      await joinGame(url, accessToken, {
-        game_id: game.id,
-        secret: game.join_code,
-      });
+      await joinGame(url, accessToken, { game_id: game.id });
       startTransition(() => {
         setCreatedGame(game);
       });
-      setNotice(
-        `Created table #${game.id}. Share the join code with your players.`,
-      );
+      pushNotice("Created table. Share the join code with your players.");
       navigate(`/lobby/${game.id}`);
     });
   }
@@ -162,20 +154,10 @@ export function LobbyScreen() {
   async function handleJoinGame() {
     await runAction("Join game", async () => {
       const url = normalizeBaseUrl(baseUrl);
-      const trimmed = joinCode.trim();
-      const sep = trimmed.indexOf("-");
-      if (sep === -1)
-        throw new Error(
-          "Invalid join code. Paste the full code your host shared.",
-        );
-      const gameId = Number.parseInt(trimmed.slice(0, sep), 10);
-      const secret = trimmed.slice(sep + 1);
-      if (!Number.isInteger(gameId) || !secret)
-        throw new Error(
-          "Invalid join code. Paste the full code your host shared.",
-        );
-      await joinGame(url, accessToken, { game_id: gameId, secret });
-      setNotice(`Joined table #${gameId}.`);
+      const gameId = joinCode.trim();
+      if (!gameId) throw new Error("Paste the join code your host shared.");
+      await joinGame(url, accessToken, { game_id: gameId });
+      pushNotice("Joined table.");
       navigate(`/lobby/${gameId}`);
     });
   }
@@ -186,7 +168,7 @@ export function LobbyScreen() {
       const team = await createTeam(normalizeBaseUrl(baseUrl), accessToken, {
         game_id: activeGameId,
       });
-      setNotice(`Created team ${team.team_number}.`);
+      pushNotice(`Created team ${team.team_number}.`);
       await refreshLobby();
     });
   }
@@ -198,7 +180,7 @@ export function LobbyScreen() {
         game_id: activeGameId,
         team_number: teamNumber,
       });
-      setNotice(`Joined team ${teamNumber}.`);
+      pushNotice(`Joined team ${teamNumber}.`);
       await refreshLobby();
     });
   }
@@ -210,7 +192,7 @@ export function LobbyScreen() {
         game_id: activeGameId,
         team_number: teamNumber,
       });
-      setNotice(`Left team ${teamNumber}.`);
+      pushNotice(`Left team ${teamNumber}.`);
       await refreshLobby();
     });
   }
@@ -222,7 +204,7 @@ export function LobbyScreen() {
         game_id: activeGameId,
         team_number: teamNumber,
       });
-      setNotice(`Deleted team ${teamNumber}.`);
+      pushNotice(`Deleted team ${teamNumber}.`);
       await refreshLobby();
     });
   }
@@ -249,7 +231,7 @@ export function LobbyScreen() {
 
   function handleLeaveTable() {
     navigate("/lobby");
-    setNotice("Left the table.");
+    pushNotice("Left the table.");
   }
 
   return (
@@ -274,16 +256,7 @@ export function LobbyScreen() {
         />
       </div>
 
-      {error && (
-        <div className="rounded-2xl border px-4 py-3 bg-red-50 border-red-200/60 dark:bg-red-game/[0.15] dark:border-red-game/25">
-          <p className="text-sm font-semibold text-red-700 dark:text-white">{error}</p>
-        </div>
-      )}
-      {notice && !error && (
-        <div className="rounded-2xl border px-4 py-3 bg-emerald-50 border-emerald-200/60 dark:bg-emerald-500/[0.15] dark:border-emerald-500/25">
-          <p className="text-sm font-semibold text-emerald-700 dark:text-white">{notice}</p>
-        </div>
-      )}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       {!inTable ? (
         <>
@@ -325,29 +298,40 @@ export function LobbyScreen() {
                   key={game.id}
                   className={`flex items-center justify-between ${glassInner} px-4 py-3`}
                 >
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                      Game #{game.id}
-                    </span>
-                    <span className="text-[10px] font-bold uppercase tracking-[1.2px] text-slate-400 dark:text-slate-400/70">
-                      {game.status === "active" ? "In Progress" : "Waiting to Start"}
-                    </span>
-                  </div>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {game.status === "active"
+                      ? "In Progress"
+                      : "Waiting to Start"}
+                  </span>
                   <div className="flex gap-2">
                     {currentUser && game.owner === currentUser.sub && (
                       <ActionButton
                         busy={busyAction === `Delete game ${game.id}`}
                         label="Delete"
                         tone="ghost"
-                        onClick={() => void runAction(`Delete game ${game.id}`, async () => {
-                          await deleteGame(normalizeBaseUrl(baseUrl), accessToken, { game_id: game.id });
-                          setActiveGames((prev) => prev.filter((g) => g.id !== game.id));
-                        })}
+                        onClick={() =>
+                          void runAction(`Delete game ${game.id}`, async () => {
+                            await deleteGame(
+                              normalizeBaseUrl(baseUrl),
+                              accessToken,
+                              { game_id: game.id },
+                            );
+                            setActiveGames((prev) =>
+                              prev.filter((g) => g.id !== game.id),
+                            );
+                          })
+                        }
                       />
                     )}
                     <ActionButton
                       label="Rejoin"
-                      onClick={() => navigate(game.status === "active" ? `/game/${game.id}` : `/lobby/${game.id}`)}
+                      onClick={() =>
+                        navigate(
+                          game.status === "active"
+                            ? `/game/${game.id}`
+                            : `/lobby/${game.id}`,
+                        )
+                      }
                       tone="secondary"
                     />
                   </div>
@@ -387,7 +371,7 @@ export function LobbyScreen() {
                 autoComplete="off"
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value)}
-                placeholder="42-abc123xyz"
+                placeholder="abc123xyz"
                 className={inputClass}
               />
             </div>
@@ -404,12 +388,35 @@ export function LobbyScreen() {
       ) : (
         <div className={`${glassPanel} p-6 gap-5`}>
           <div>
-            <span className="text-[10px] font-extrabold uppercase tracking-[1.6px] text-red-game">
-              Table
-            </span>
-            <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white mt-0.5">
-              Game #{activeGameId}
-            </h2>
+            {lobbyState && lobbyState.players.length > 0 ? (
+              <table className="mt-2 w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-blue-200/60">
+                    <th className="pb-1.5">Active Players</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lobbyState.players.map((player) => (
+                    <tr
+                      key={player}
+                      className="border-t border-slate-200 dark:border-blue-200/20"
+                    >
+                      <td className="py-2 flex items-center gap-2.5">
+                        <div className="inline-flex items-center justify-center rounded-full bg-blue-300 dark:bg-blue-700 px-4 py-1.5 text-xs font-extrabold text-blue-950 dark:text-blue-100">
+                          <span className="font-semibold text-gray-900 dark:text-white">
+                            {player}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white mt-0.5">
+                Waiting for players...
+              </h2>
+            )}
             <p className="mt-1 text-sm text-slate-500 dark:text-blue-200/65 leading-relaxed">
               Set up teams, then start the game when everyone is seated.
             </p>
@@ -429,7 +436,9 @@ export function LobbyScreen() {
           {/* Teams section */}
           <div className={`${glassInner} p-4 flex flex-col gap-4`}>
             <div>
-              <h3 className="text-base font-extrabold text-gray-900 dark:text-white">Teams</h3>
+              <h3 className="text-base font-extrabold text-gray-900 dark:text-white">
+                Teams
+              </h3>
               <p className="mt-0.5 text-xs text-slate-500 dark:text-blue-200/60 leading-relaxed">
                 Join an open team or create a new one for you and a partner.
               </p>
