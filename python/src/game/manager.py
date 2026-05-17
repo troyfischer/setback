@@ -116,7 +116,7 @@ class Bid(BaseModel):
 
 
 class GameModel(BaseModel):
-    game_id: int
+    game_id: str
 
     @cached_property
     def log(self) -> FilteringBoundLogger:
@@ -339,7 +339,7 @@ class GameRound(_GameRound):
 
     @staticmethod
     def new_round(
-        game_id: int,
+        game_id: str,
         players: int,
         dealer_idx: ModIdx | None = None,
     ) -> GameRound:
@@ -514,7 +514,7 @@ class GameStatePlayerScoped(_GameState):
 
 class RedisKeys:
     @staticmethod
-    def game_state(game_id: int) -> str:
+    def game_state(game_id: str) -> str:
         return f"{game_id}:state"
 
 

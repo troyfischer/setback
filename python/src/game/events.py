@@ -24,12 +24,12 @@ class GameEvent(BaseModel):
     """Base class for all game events which will be emitted to connected clients"""
 
     event_type: EventType
-    game_id: int
+    game_id: str
     data: dict[str, Any]
 
 
 class RedisChannels:
     @staticmethod
-    def game(game_id: int) -> str:
+    def game(game_id: str) -> str:
         """Channel for all events in a specific game"""
         return f"game:{game_id}"

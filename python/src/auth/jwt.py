@@ -7,7 +7,7 @@ from typing import Annotated, cast, final
 
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+from jose import JWTError, jwt  # type: ignore[import-untyped]
 
 from src.auth.models import Claims
 from src.auth.secrets import ALGORITHM, SECRET_KEY
@@ -43,7 +43,7 @@ class JWT:
         if extra_claims:
             claims.update(extra_claims)
 
-        encoded_jwt = jwt.encode(
+        encoded_jwt: str = jwt.encode(
             claims=claims,
             key=self._key,
             algorithm=self._algorithm,
@@ -90,7 +90,7 @@ class JWT:
     def create_sse_token(
         self,
         sub: str,
-        game_id: int,
+        game_id: str,
         audience: str,
         seconds_to_expire: int = 60,
     ) -> str:
@@ -117,7 +117,7 @@ class JWT:
         self,
         token: str,
         *,
-        expected_game_id: int,
+        expected_game_id: str,
         expected_audience: str,
     ) -> Claims:
         claims = self._validate(token, TokenType.SSE)
@@ -126,7 +126,7 @@ class JWT:
         game_id = claims.get("game_id")
         audience = claims.get("aud")
 
-        if not isinstance(game_id, int) or game_id != expected_game_id:
+        if not isinstance(game_id, str) or game_id != expected_game_id:
             raise exc
         if not isinstance(audience, str) or audience != expected_audience:
             raise exc

@@ -187,7 +187,7 @@ class RedisSubscriber:
         self._running = False
         if self.pubsub:
             await self.pubsub.unsubscribe()  # pyright: ignore[reportUnknownMemberType]
-            await self.pubsub.aclose()
+            await self.pubsub.aclose()  # type: ignore[no-untyped-call]
         if self.redis_client:
             await self.redis_client.aclose()
         logger.info("redis subscriber stopped")
@@ -221,7 +221,7 @@ class RedisSubscriber:
         try:
             # Extract game_id from channel name (e.g., "game:123" -> 123)
             channel = message["channel"].decode("utf-8")
-            game_id = int(channel.split(":")[1])
+            game_id = channel.split(":")[1]
 
             # Parse the event
             event = GameEvent.model_validate_json(message["data"])

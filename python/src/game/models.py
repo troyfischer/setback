@@ -9,9 +9,8 @@ from typing import Literal, override
 
 from pydantic import BaseModel
 from pydantic import Field as PydField
-from sqlalchemy import ForeignKey, UniqueConstraint
 from sqlalchemy import Column as SaColumn
-from sqlalchemy import Integer
+from sqlalchemy import ForeignKey, String, UniqueConstraint
 from sqlmodel import Field as SqlField
 from sqlmodel import ForeignKeyConstraint, SQLModel
 
@@ -22,11 +21,14 @@ class GameStatus(enum.StrEnum):
     CREATED = enum.auto()
     ACTIVE = enum.auto()
     ENDED = enum.auto()
+    CANCELLED = enum.auto()
 
 
 class Game(SQLModel, table=True):
-    id: int = SqlField(default=None, primary_key=True)
-    join_code: str = SqlField(default_factory=lambda: secrets.token_urlsafe(8))
+    id: str = SqlField(
+        default_factory=lambda: secrets.token_urlsafe(8),
+        primary_key=True,
+    )
     created_at: datetime.datetime = SqlField(
         default_factory=lambda: datetime.datetime.now(tz=datetime.UTC)
     )
@@ -36,12 +38,24 @@ class Game(SQLModel, table=True):
 
 class Player(SQLModel, table=True):
     id: str = SqlField(foreign_key="oauthuser.sub", primary_key=True)
-    game_id: int = SqlField(sa_column=SaColumn(Integer, ForeignKey("game.id", ondelete="CASCADE"), primary_key=True))
+    game_id: str = SqlField(
+        sa_column=SaColumn(
+            String,
+            ForeignKey("game.id", ondelete="CASCADE"),
+            primary_key=True,
+        )
+    )
 
 
 class Team(SQLModel, table=True):
     id: int = SqlField(default=None, primary_key=True)
-    game_id: int = SqlField(sa_column=SaColumn(Integer, ForeignKey("game.id", ondelete="CASCADE"), nullable=False))
+    game_id: str = SqlField(
+        sa_column=SaColumn(
+            String,
+            ForeignKey("game.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
     team_number: int
     owner: str = SqlField(foreign_key="oauthuser.sub")
 
@@ -53,7 +67,7 @@ class Team(SQLModel, table=True):
 
 class TeamMember(SQLModel, table=True):
     # one row per (game, player) -> belongs to exactly one team in that game
-    game_id: int = SqlField(primary_key=True)
+    game_id: str = SqlField(primary_key=True)
     team_id: int = SqlField(primary_key=True)
     player_id: str = SqlField(primary_key=True)
 
@@ -77,11 +91,7 @@ class TeamMember(SQLModel, table=True):
 
 
 class GameRequest(BaseModel):
-    game_id: int
-
-
-class GameManagementRequest(GameRequest):
-    secret: str
+    game_id: str
 
 
 class BidRequest(GameRequest):
@@ -97,14 +107,14 @@ class UpdateTeamRequest(GameRequest):
 
 
 class TeamMembership(BaseModel):
-    game_id: int
+    game_id: str
     player_id: str
     team_number: int
 
 
 class TeamWithMembers(BaseModel):
     id: int
-    game_id: int
+    game_id: str
     team_number: int
     owner: str
     members: list[str]

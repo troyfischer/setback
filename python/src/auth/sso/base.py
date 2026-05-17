@@ -7,7 +7,7 @@ from starlette.config import Config
 from starlette.requests import Request
 
 config = Config()
-oauth = OAuth(config=config)
+oauth = OAuth(config=config)  # type: ignore[no-untyped-call]
 
 
 class OAuthProvider(ABC):

@@ -19,7 +19,7 @@ router = APIRouter(prefix="/auth")
 
 _LOCAL_DEV_HOSTS = {"localhost", "127.0.0.1"}
 
-_handlers = {h.provider: h for h in [GoogleOAuth()]}
+_handlers = {h.provider: h for h in [GoogleOAuth()]}  # type: ignore[no-untyped-call]
 
 
 def _get_handler(provider: str) -> GoogleOAuth:

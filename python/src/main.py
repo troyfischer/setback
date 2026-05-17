@@ -7,15 +7,15 @@ import redis
 import redis.asyncio as redis_async
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import Engine, event
+from sqlalchemy import Engine, event, text
 from sqlalchemy.engine import Connection
 from sqlmodel import SQLModel, create_engine
 from starlette.middleware.sessions import SessionMiddleware
 
 import src.auth.routes
-from src.game.exceptions import InvalidGameStateException, invalid_game_state_handler
 import src.game.routes
 from src.config import Settings
+from src.game.exceptions import InvalidGameStateException, invalid_game_state_handler
 from src.game.manager import GameManager
 from src.game.sse import ConnectionManager, RedisSubscriber
 
@@ -26,19 +26,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.settings = settings
 
     # relational db
-    engine: Engine = create_engine(settings.database_url, connect_args={})
+    engine: Engine = create_engine(
+        settings.database_url,
+        connect_args={},
+        pool_pre_ping=True,
+    )
 
     if engine.dialect.name == "sqlite":
 
         @event.listens_for(engine, "connect")
         def set_sqlite_pragma(conn: Connection, _: object) -> None:
-            conn.execute("PRAGMA foreign_keys=ON")  # type: ignore[arg-type]
+            conn.execute(text("PRAGMA foreign_keys=ON"))
 
     SQLModel.metadata.create_all(engine)
     app.state.db_engine = engine
 
     # game management
-    sync_redis = redis.from_url(settings.redis_url)  # pyright: ignore[reportUnknownMemberType]
+    sync_redis = redis.from_url(settings.redis_url)  # type: ignore[no-untyped-call]  # pyright: ignore[reportUnknownMemberType]
     gm = GameManager(sync_redis, engine)
     app.state.gm = gm
 
@@ -47,7 +51,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.cm = cm
 
     # redis subscriber for pub/sub
-    async_redis = redis_async.from_url(settings.redis_url)  # pyright: ignore[reportUnknownMemberType]
+    async_redis = redis_async.from_url(settings.redis_url)  # type: ignore[no-untyped-call]  # pyright: ignore[reportUnknownMemberType]
     subscriber = RedisSubscriber(async_redis, cm)
     await subscriber.start()
 

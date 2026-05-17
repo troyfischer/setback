@@ -1,3 +1,3 @@
 PlayerId = str
-GameId = int
+GameId = str
 TeamId = int

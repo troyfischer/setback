@@ -21,7 +21,6 @@ from src.game.manager import GameStatePlayerScoped
 from src.game.models import (
     BidRequest,
     Game,
-    GameManagementRequest,
     GameStatus,
     LobbyState,
     PlayCardRequest,
@@ -86,6 +85,18 @@ async def delete_game(
     return game
 
 
+@router.post("/cancel")
+async def cancel_game(
+    db: DBSession,
+    game: Annotated[Game, Depends(require_owner)],
+):
+    game.status = GameStatus.CANCELLED
+    db.merge(game)
+    db.commit()
+
+    return game
+
+
 @router.post("/leave")
 async def leave_game(
     user: Annotated[OAuthUser, Depends(get_current_user)],
@@ -101,15 +112,11 @@ async def leave_game(
 
 @router.post("/join")
 async def join_game(
-    req: GameManagementRequest,
     request: Request,
     db: DBSession,
     game: Annotated[Game, Depends(get_game)],
 ):
     user = cast(OAuthUser, request.state.user)
-
-    if game.join_code != req.secret:
-        raise HTTPException(400, "game join code does not match")
 
     p = Player(game_id=game.id, id=user.sub)
     p = db.merge(p)
@@ -180,7 +187,7 @@ class SubscribeTokenResponse(BaseModel):
 
 
 async def sse_event_stream(
-    game_id: int,
+    game_id: str,
     player_id: str,
     connection_manager: ConnectionManager,
     *,
@@ -208,7 +215,7 @@ async def sse_event_stream(
 
 @router.post("/{game_id}/subscribe-token")
 async def create_subscribe_token(
-    game_id: int,
+    game_id: str,
     user: Annotated[OAuthUser, Depends(get_current_user)],
     db: DBSession,
     jwt: JwtManager,
@@ -236,7 +243,7 @@ async def create_subscribe_token(
 @unauthenticated_router.get("/{game_id}/subscribe")
 async def game_subscribe(
     ctx: RequestContext,
-    game_id: int,
+    game_id: str,
     jwt: JwtManager,
     sse_token: str | None = None,
 ):
@@ -285,7 +292,7 @@ async def game_subscribe(
 
 @router.get("/{game_id}/lobby")
 def get_lobby_state(
-    game_id: int,
+    game_id: str,
     user: Annotated[OAuthUser, Depends(get_current_user)],
     db: DBSession,
 ) -> LobbyState:
@@ -328,7 +335,7 @@ def get_lobby_state(
 @router.get("/{game_id}/state")
 def get_game_state(
     ctx: RequestContext,
-    game_id: int,
+    game_id: str,
     user: Annotated[OAuthUser, Depends(get_current_user)],
     db: DBSession,
 ) -> GameStatePlayerScoped:
