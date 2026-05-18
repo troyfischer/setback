@@ -5,12 +5,12 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, cast, final
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt  # type: ignore[import-untyped]
 
 from src.auth.models import Claims
-from src.auth.secrets import ALGORITHM, SECRET_KEY
+from src.config import Settings
 
 
 class TokenType(enum.StrEnum):
@@ -85,6 +85,7 @@ class JWT:
             sub,
             TokenType.REFRESH,
             expires_in=timedelta(days=days_to_expire),
+            extra_claims={"jti": secrets.token_urlsafe(16)},
         )
 
     def create_sse_token(
@@ -133,8 +134,9 @@ class JWT:
         return claims
 
 
-def get_jwt_manager():
-    yield JWT(SECRET_KEY, ALGORITHM)
+def get_jwt_manager(request: Request):
+    settings = cast(Settings, request.app.state.settings)
+    yield JWT(settings.jwt_secret, settings.jwt_algorithm)
 
 
 JwtManager = Annotated[JWT, Depends(get_jwt_manager)]

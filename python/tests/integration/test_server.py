@@ -48,6 +48,8 @@ def docker_compose(base_url: str):
     log.info("starting docker compose services...")
 
     os.environ["CADDYFILE"] = "./Caddyfile.local"
+    os.environ.setdefault("APP_ENV", "test")
+    os.environ.setdefault("ENABLE_DEV_AUTH", "true")
 
     compose = DockerCompose(
         project_root,

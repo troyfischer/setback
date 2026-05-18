@@ -1,5 +1,5 @@
 import json
-import os
+from pathlib import Path
 from typing import final, override
 
 from pydantic_settings import BaseSettings
@@ -30,11 +30,11 @@ class GoogleOAuth(OAuthProvider):
 
     @staticmethod
     def load_creds() -> Credentials:
-        path = os.path.join(
-            os.getcwd(),
-            "resources",
-            "secrets",
-            "client_secret_876549504601-2tf3amdgcj86ub91fh0iidqq7fdva8t2.apps.googleusercontent.com.json",
+        path = (
+            Path(__file__).resolve().parents[3]
+            / "resources"
+            / "secrets"
+            / "client_secret_876549504601-2tf3amdgcj86ub91fh0iidqq7fdva8t2.apps.googleusercontent.com.json"
         )
         with open(path) as fp:
             content = json.load(fp)

@@ -6,6 +6,11 @@ export type TokenResponse = {
   token_type: string;
 };
 
+export type AuthOptions = {
+  dev_auth_enabled: boolean;
+  oauth_providers: string[];
+};
+
 export type CurrentUser = {
   email: string;
   email_verified: boolean;

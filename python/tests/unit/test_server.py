@@ -2,6 +2,8 @@
 # pyright: basic
 
 import asyncio
+import os
+import re
 from collections.abc import Generator
 from datetime import datetime
 from http import HTTPStatus
@@ -13,14 +15,18 @@ from fakeredis import FakeRedis
 from fakeredis.aioredis import FakeRedis as AsyncFakeRedis
 from fastapi.testclient import TestClient
 
+os.environ.setdefault("APP_ENV", "test")
+os.environ.setdefault("ENABLE_DEV_AUTH", "true")
+
 import src.game.routes.game as game_routes
 from src.auth import routes as auth_routes
+from src.config import AppEnv, Settings
 from src.auth.sso.models import OAuthUser
 from src.game.events import GameEvent
 from src.game.manager import GameStatePlayerScoped, Phase
 from src.game.models import Game, Team
 from src.game.sse import ConnectionManager
-from src.main import app
+from src.main import create_app
 from tests.helpers import (
     create_and_join_teams,
     create_authenticated_users,
@@ -67,7 +73,7 @@ def temp_database():
 
 @pytest.fixture(scope="session")
 def client():
-    with TestClient(app) as c:
+    with TestClient(create_app()) as c:
         yield c
 
 
@@ -196,6 +202,15 @@ def test_oauth_unknown_provider_returns_404(client: TestClient):
     assert res.status_code == HTTPStatus.NOT_FOUND
 
 
+def test_auth_options_exposes_enabled_login_methods(client: TestClient):
+    res = client.get("/auth/options")
+    assert res.status_code == HTTPStatus.OK
+    assert res.json() == {
+        "dev_auth_enabled": True,
+        "oauth_providers": ["google"],
+    }
+
+
 def test_oauth_callback_sets_refresh_cookie_and_refresh_succeeds(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -229,6 +244,87 @@ def test_oauth_callback_sets_refresh_cookie_and_refresh_succeeds(
     refresh_res = client.get("/auth/refresh")
     assert refresh_res.status_code == HTTPStatus.OK
     assert refresh_res.json()["access_token"]
+    assert "refresh_token=" in refresh_res.headers.get("set-cookie", "")
+
+
+def test_refresh_token_is_rotated_and_old_cookie_is_rejected(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class FakeGoogleOAuth:
+        async def callback(self, request):
+            return OAuthUser(
+                at_hash="test",
+                aud="test",
+                azp="test",
+                email="player@example.com",
+                email_verified=True,
+                exp=datetime.now(),
+                family_name="Player",
+                given_name="Test",
+                iat=datetime.now(),
+                iss="test",
+                name="Test Player",
+                nonce="test",
+                picture="test",
+                sub="google-user-rotate",
+            )
+
+    monkeypatch.setitem(auth_routes._handlers, "google", FakeGoogleOAuth())
+
+    callback_res = client.get("/auth/google/callback")
+    assert callback_res.status_code == HTTPStatus.OK
+
+    set_cookie = callback_res.headers.get("set-cookie", "")
+    match = re.search(r"refresh_token=([^;]+)", set_cookie)
+    assert match is not None
+    original_refresh = match.group(1)
+
+    refresh_res = client.get("/auth/refresh")
+    assert refresh_res.status_code == HTTPStatus.OK
+
+    stale_refresh_res = client.get(
+        "/auth/refresh",
+        cookies={"refresh_token": original_refresh},
+    )
+    assert stale_refresh_res.status_code == HTTPStatus.UNAUTHORIZED
+
+
+def test_dev_auth_route_is_registered_in_test_app():
+    routes = {route.path for route in create_app().routes}
+    assert "/auth/dev-token" in routes
+
+
+def test_create_app_rejects_dev_auth_in_prod():
+    with pytest.raises(RuntimeError):
+        create_app(
+            Settings(
+                app_env=AppEnv.PROD,
+                enable_dev_auth=True,
+            )
+        )
+
+
+def test_create_app_rejects_default_jwt_secret_in_prod():
+    with pytest.raises(RuntimeError):
+        create_app(
+            Settings(
+                app_env=AppEnv.PROD,
+                enable_dev_auth=False,
+                session_secret="prod-session-secret",
+            )
+        )
+
+
+def test_create_app_accepts_custom_prod_secrets():
+    create_app(
+        Settings(
+            app_env=AppEnv.PROD,
+            enable_dev_auth=False,
+            session_secret="prod-session-secret",
+            jwt_secret="prod-jwt-secret",
+        )
+    )
 
 
 def test_subscribe_requires_auth(client: TestClient, game: Game):

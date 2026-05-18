@@ -18,10 +18,14 @@ services:
     expose:
       - "80"
     environment:
+      APP_ENV: ${APP_ENV:-dev}
+      ENABLE_DEV_AUTH: ${ENABLE_DEV_AUTH:-false}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       DATABASE_URL: ${DATABASE_URL:-postgresql://app:secret@postgres:5432/appdb}
       BASE_URL: ${BASE_URL:-http://localhost}
       SESSION_SECRET: ${SESSION_SECRET:-your-super-secret-key-change-me}
+      JWT_SECRET: ${JWT_SECRET:-your-jwt-signing-secret-change-me}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       CLIENT_ORIGIN: ${CLIENT_ORIGIN:-http://localhost:8081}
     depends_on:
       redis:

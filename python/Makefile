@@ -23,10 +23,10 @@ test-all:
 	uv run pytest tests -v
 
 dev-up:
-	CADDYFILE=./Caddyfile.local docker compose up -d
+	ENABLE_DEV_AUTH=1 CADDYFILE=./Caddyfile.local docker compose up -d
 
 dev-rebuild:
-	CADDYFILE=./Caddyfile.local docker compose up -d --build
+	ENABLE_DEV_AUTH=1 CADDYFILE=./Caddyfile.local docker compose up -d --build
 
 dev-down:
 	docker compose down

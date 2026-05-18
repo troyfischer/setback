@@ -16,13 +16,21 @@ const inputClass = [
 ].join(" ");
 
 export function WelcomeScreen() {
-  const { baseUrl, setBaseUrl, setAccessToken, setCurrentUser } = useAuth();
+  const {
+    authOptions,
+    baseUrl,
+    setBaseUrl,
+    setAccessToken,
+    setCurrentUser,
+  } = useAuth();
   const navigate = useNavigate();
 
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [devUsername, setDevUsername] = useState("");
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const googleEnabled = authOptions?.oauth_providers.includes("google") ?? true;
+  const guestEnabled = authOptions?.dev_auth_enabled ?? false;
 
   async function runAction(label: string, action: () => Promise<void>) {
     setBusyAction(label);
@@ -96,6 +104,7 @@ export function WelcomeScreen() {
         <ActionButton
           busy={busyAction === "Google login"}
           label="Sign In With Google"
+          disabled={!googleEnabled}
           onClick={() => {
             void handleGoogleLogin();
           }}
@@ -111,27 +120,40 @@ export function WelcomeScreen() {
 
         {showAdvanced && (
           <div className="flex flex-col gap-4 border-t border-slate-200/60 dark:border-white/[0.08] pt-5">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold uppercase tracking-wide text-gray-700 dark:text-blue-100/70">
-                Guest name
-              </label>
-              <input
-                type="text"
-                autoComplete="off"
-                value={devUsername}
-                onChange={(e) => setDevUsername(e.target.value)}
-                placeholder="player-one"
-                className={inputClass}
-              />
-            </div>
-            <ActionButton
-              busy={busyAction === "Dev login"}
-              label="Continue As Guest"
-              onClick={() => {
-                void handleDevLogin();
-              }}
-              tone="secondary"
-            />
+            {guestEnabled && (
+              <>
+                <div className="rounded-2xl border px-4 py-3 bg-amber-50/80 border-amber-200/70 dark:bg-amber-400/[0.08] dark:border-amber-300/20">
+                  <p className="text-xs font-bold uppercase tracking-wide text-amber-800 dark:text-amber-200">
+                    Dev server guest login enabled
+                  </p>
+                  <p className="mt-1 text-sm leading-relaxed text-amber-900/80 dark:text-amber-100/75">
+                    This shortcut is only available because the connected
+                    backend has development auth turned on.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wide text-gray-700 dark:text-blue-100/70">
+                    Guest name
+                  </label>
+                  <input
+                    type="text"
+                    autoComplete="off"
+                    value={devUsername}
+                    onChange={(e) => setDevUsername(e.target.value)}
+                    placeholder="player-one"
+                    className={inputClass}
+                  />
+                </div>
+                <ActionButton
+                  busy={busyAction === "Dev login"}
+                  label="Continue As Guest"
+                  onClick={() => {
+                    void handleDevLogin();
+                  }}
+                  tone="secondary"
+                />
+              </>
+            )}
             <div className="flex flex-col gap-1.5 mt-2">
               <label className="text-xs font-bold uppercase tracking-wide text-gray-700 dark:text-blue-100/70">
                 Server

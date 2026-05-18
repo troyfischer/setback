@@ -24,7 +24,7 @@ def create_authenticated_users(client: HTTPClient, users: list[str]) -> dict[str
     tokens = {}
     for user in users:
         res = client.post(
-            "/auth/token",
+            "/auth/dev-token",
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             data={"username": user, "password": "testpassword"},
         )

@@ -1,4 +1,5 @@
 import type {
+  AuthOptions,
   BidRequest,
   CurrentUser,
   GameRecord,
@@ -43,12 +44,18 @@ function withBearer(token: string) {
   };
 }
 
+export async function fetchAuthOptions(baseUrl: string) {
+  return requestJson<AuthOptions>(`${baseUrl}/auth/options`, {
+    method: "GET",
+  });
+}
+
 export async function createDevToken(baseUrl: string, username: string) {
   const form = new URLSearchParams();
   form.set("username", username);
   form.set("password", "dev-password");
 
-  return requestJson<TokenResponse>(`${baseUrl}/auth/token`, {
+  return requestJson<TokenResponse>(`${baseUrl}/auth/dev-token`, {
     body: form.toString(),
     credentials: "include",
     headers: {

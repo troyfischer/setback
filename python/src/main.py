@@ -12,6 +12,7 @@ from sqlalchemy.engine import Connection
 from sqlmodel import SQLModel, create_engine
 from starlette.middleware.sessions import SessionMiddleware
 
+import src.auth.dev_routes
 import src.auth.routes
 import src.game.routes
 from src.config import Settings
@@ -22,7 +23,7 @@ from src.game.sse import ConnectionManager, RedisSubscriber
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    settings = Settings()
+    settings = app.state.settings
     app.state.settings = settings
 
     # relational db
@@ -63,31 +64,39 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await subscriber.stop()
 
 
-app = FastAPI(
-    title="Setback",
-    description="An application hosting the card game called setback",
-    version="0.1.0",
-    lifespan=lifespan,
-)
+def create_app(settings: Settings | None = None) -> FastAPI:
+    settings = settings or Settings()
+    settings.validate_runtime()
 
-# Session middleware will use settings after lifespan startup
-# For now, use a temporary key that will be replaced
-settings = Settings()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origin_regex=settings.cors_origin_regex,
-    allow_credentials=True,
-    allow_headers=["*"],
-    allow_methods=["*"],
-)
-app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
-app.include_router(src.auth.routes.router)
-app.include_router(src.game.routes.router)
+    app = FastAPI(
+        title="Setback",
+        description="An application hosting the card game called setback",
+        version="0.1.0",
+        lifespan=lifespan,
+    )
+    app.state.settings = settings
 
-app.add_exception_handler(InvalidGameStateException, invalid_game_state_handler)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=settings.cors_origin_regex,
+        allow_credentials=True,
+        allow_headers=["*"],
+        allow_methods=["*"],
+    )
+    app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
+    app.include_router(src.auth.routes.router)
+    if settings.dev_auth_enabled:
+        app.include_router(src.auth.dev_routes.router)
+    app.include_router(src.game.routes.router)
+
+    app.add_exception_handler(InvalidGameStateException, invalid_game_state_handler)
+
+    @app.get("/health")
+    async def health_check():
+        """Health check endpoint for monitoring and testing."""
+        return {"status": "healthy"}
+
+    return app
 
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint for monitoring and testing."""
-    return {"status": "healthy"}
+app = create_app()

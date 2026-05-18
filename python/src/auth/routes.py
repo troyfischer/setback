@@ -1,14 +1,13 @@
 import json
-from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from starlette.requests import Request
 
+from src.auth.cookies import clear_refresh_cookie, set_refresh_cookie
 from src.auth.jwt import JwtManager
-from src.auth.models import Token
+from src.auth.models import AuthOptions, RefreshToken, Token
 from src.auth.sso import GoogleOAuth
 from src.auth.sso.models import OAuthUser
 from src.auth.utils import get_current_user
@@ -16,8 +15,6 @@ from src.db import DBSession
 from src.request import RequestContext
 
 router = APIRouter(prefix="/auth")
-
-_LOCAL_DEV_HOSTS = {"localhost", "127.0.0.1"}
 
 _handlers = {h.provider: h for h in [GoogleOAuth()]}  # type: ignore[no-untyped-call]
 
@@ -29,17 +26,24 @@ def _get_handler(provider: str) -> GoogleOAuth:
     return handler
 
 
-def _refresh_cookie_secure(request: Request) -> bool:
-    forwarded_proto = request.headers.get("x-forwarded-proto", "")
-    if forwarded_proto:
-        scheme = forwarded_proto.split(",", 1)[0].strip()
-    else:
-        scheme = request.url.scheme
+def _persist_refresh_session(db: DBSession, sub: str, refresh_token: str, jwt: JwtManager) -> None:
+    claims = jwt.validate_refresh_token(refresh_token)
+    jti = claims.get("jti")
+    if not isinstance(jti, str):
+        raise HTTPException(500, "refresh token missing jti")
 
-    host = request.url.hostname or ""
-    if scheme != "https":
-        return False
-    return host not in _LOCAL_DEV_HOSTS
+    db.merge(RefreshToken(sub=sub, token=jti))
+
+
+def _issue_tokens(
+    db: DBSession,
+    jwt: JwtManager,
+    sub: str,
+) -> tuple[str, str]:
+    access_token = jwt.create_access_token(sub)
+    refresh_token = jwt.create_refresh_token(sub)
+    _persist_refresh_session(db, sub, refresh_token, jwt)
+    return access_token, refresh_token
 
 
 @router.get("/{provider}/login")
@@ -75,6 +79,14 @@ class HTMLTemplate:
         )
 
 
+@router.get("/options")
+async def auth_options(ctx: RequestContext) -> AuthOptions:
+    return AuthOptions(
+        dev_auth_enabled=ctx.settings.dev_auth_enabled,
+        oauth_providers=sorted(_handlers),
+    )
+
+
 @router.get("/{provider}/callback")
 async def oauth_callback(
     ctx: RequestContext,
@@ -87,11 +99,10 @@ async def oauth_callback(
     settings = ctx.settings
 
     merged = db.merge(sso_user)
-    db.commit()
 
     # create tokens
-    access_token = jwt.create_access_token(merged.sub)
-    refresh_token = jwt.create_refresh_token(merged.sub)
+    access_token, refresh_token = _issue_tokens(db, jwt, merged.sub)
+    db.commit()
 
     response = HTMLResponse(
         content=str(HTMLTemplate(access_token, settings.client_origin)),
@@ -100,14 +111,7 @@ async def oauth_callback(
             "X-Frame-Options": "DENY",
         },
     )
-    response.set_cookie(
-        key="refresh_token",
-        value=refresh_token,
-        max_age=30 * 24 * 60 * 60,  # 30 days in seconds
-        httponly=True,  # Can't be accessed by JavaScript
-        secure=_refresh_cookie_secure(request),
-        samesite="lax",  # CSRF protection
-    )
+    set_refresh_cookie(response, request, refresh_token)
     return response
 
 
@@ -115,71 +119,46 @@ async def oauth_callback(
 async def refresh(request: Request, db: DBSession, jwt: JwtManager):
     rt = request.cookies.get("refresh_token")
     claims = jwt.validate_refresh_token(rt or "")
+    jti = claims.get("jti")
+    if not isinstance(jti, str):
+        raise HTTPException(401, "Invalid refresh token")
 
     user = db.get(OAuthUser, claims["sub"])
+    session = db.get(RefreshToken, claims["sub"])
     if not user:
         raise HTTPException(401, "User not found")
-    elif not user.logged_in:
-        # TODO: this adds a level of additional complication but it just seems
-        # like a security risk without it?
+    elif not session or session.token != jti:
         raise HTTPException(401, "User logged out")
 
-    token = jwt.create_access_token(user.sub)
-    return Token(access_token=token)
-
-
-@router.get("/logout")
-async def logout(user: Annotated[OAuthUser, Depends(get_current_user)], db: DBSession):
-    user.logged_in = False
-    _ = db.merge(user)
-    db.commit()
-
-    return user.name + " logged out"
-
-
-@router.get("/me")
-async def me(user: Annotated[OAuthUser, Depends(get_current_user)]) -> OAuthUser:
-    return user
-
-
-@router.post("/token")
-async def dev_token(
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-    request: Request,
-    db: DBSession,
-    jwt: JwtManager,
-):
-    access_token = jwt.create_access_token(form_data.username)
-    refresh_token = jwt.create_refresh_token(form_data.username)
-    user = OAuthUser(
-        at_hash="test",
-        aud="test",
-        azp="test",
-        email="test@email.com",
-        email_verified=True,
-        exp=datetime.now(),
-        family_name=form_data.username,
-        given_name=form_data.username,
-        iat=datetime.now(),
-        iss="test",
-        nonce="test",
-        picture="test",
-        sub=form_data.username,
-        name=form_data.username,
-    )
-    _ = db.merge(user)
+    access_token, refresh_token = _issue_tokens(db, jwt, user.sub)
     db.commit()
 
     response = JSONResponse(
         content=Token(access_token=access_token).model_dump(),
         headers={"Cache-Control": "no-store"},
     )
-    response.set_cookie(
-        key="refresh_token",
-        value=refresh_token,
-        max_age=30 * 24 * 60 * 60,
-        httponly=True,
-        secure=_refresh_cookie_secure(request),
-        samesite="lax",
-    )
+    set_refresh_cookie(response, request, refresh_token)
     return response
+
+
+@router.get("/logout")
+async def logout(
+    request: Request,
+    user: Annotated[OAuthUser, Depends(get_current_user)],
+    db: DBSession,
+):
+    user.logged_in = False
+    _ = db.merge(user)
+    session = db.get(RefreshToken, user.sub)
+    if session:
+        db.delete(session)
+    db.commit()
+
+    response = PlainTextResponse(user.name + " logged out")
+    clear_refresh_cookie(response, request)
+    return response
+
+
+@router.get("/me")
+async def me(user: Annotated[OAuthUser, Depends(get_current_user)]) -> OAuthUser:
+    return user

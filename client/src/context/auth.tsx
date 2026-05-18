@@ -7,12 +7,13 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 
-import { fetchMe, refreshAccessToken } from "../lib/api";
+import { fetchAuthOptions, fetchMe, refreshAccessToken } from "../lib/api";
 import { getDefaultApiBaseUrl, normalizeBaseUrl } from "../lib/format";
-import type { CurrentUser } from "../types/setback";
+import type { AuthOptions, CurrentUser } from "../types/setback";
 
 type AuthContextValue = {
   accessToken: string;
+  authOptions: AuthOptions | null;
   baseUrl: string;
   currentUser: CurrentUser | null;
   hydrated: boolean;
@@ -26,8 +27,31 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [accessToken, setAccessToken] = useState("");
+  const [authOptions, setAuthOptions] = useState<AuthOptions | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [baseUrl, setBaseUrl] = useState(getDefaultApiBaseUrl());
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAuthOptions() {
+      const url = normalizeBaseUrl(baseUrl);
+      try {
+        const options = await fetchAuthOptions(url);
+        if (cancelled) return;
+        setAuthOptions(options);
+      } catch {
+        if (!cancelled) {
+          setAuthOptions(null);
+        }
+      }
+    }
+
+    void loadAuthOptions();
+    return () => {
+      cancelled = true;
+    };
+  }, [baseUrl]);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         accessToken,
+        authOptions,
         baseUrl,
         currentUser,
         hydrated,

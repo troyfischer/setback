@@ -19,6 +19,11 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
+class AuthOptions(BaseModel):
+    dev_auth_enabled: bool
+    oauth_providers: list[str]
+
+
 class RefreshToken(SQLModel, table=True):
     sub: str = Field(primary_key=True, foreign_key="oauthuser.sub")
     token: str
