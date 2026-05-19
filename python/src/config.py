@@ -22,13 +22,25 @@ class Settings(BaseSettings):
     jwt_secret: str = DEFAULT_JWT_SECRET
     jwt_algorithm: str = DEFAULT_JWT_ALGORITHM
     client_origin: str = "http://localhost:8081"
-    cors_origin_regex: str = (
+    dev_cors_origin_regex: str = (
         r"http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?"
     )
 
     @property
     def dev_auth_enabled(self) -> bool:
         return self.app_env in {AppEnv.DEV, AppEnv.TEST} and self.enable_dev_auth
+
+    @property
+    def cors_allowed_origins(self) -> list[str]:
+        if self.app_env == AppEnv.PROD:
+            return [self.client_origin]
+        return []
+
+    @property
+    def cors_origin_regex(self) -> str | None:
+        if self.app_env == AppEnv.PROD:
+            return None
+        return self.dev_cors_origin_regex
 
     def validate_runtime(self) -> None:
         if self.app_env == AppEnv.PROD and self.enable_dev_auth:

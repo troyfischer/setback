@@ -7,7 +7,7 @@ import redis
 import redis.asyncio as redis_async
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import Engine, event, text
+from sqlalchemy import Engine, event
 from sqlalchemy.engine import Connection
 from sqlmodel import SQLModel, create_engine
 from starlette.middleware.sessions import SessionMiddleware
@@ -78,6 +78,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
+        allow_origins=settings.cors_allowed_origins,
         allow_origin_regex=settings.cors_origin_regex,
         allow_credentials=True,
         allow_headers=["*"],
