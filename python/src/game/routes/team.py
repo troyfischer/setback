@@ -24,6 +24,14 @@ router = APIRouter(
 )
 
 
+def _get_team_membership(db: DBSession, game_id: str, player_id: str) -> TeamMember | None:
+    return db.exec(
+        select(TeamMember).where(
+            (TeamMember.game_id == game_id) & (TeamMember.player_id == player_id)
+        )
+    ).first()
+
+
 @router.post("/create")
 async def create_team(
     db: DBSession,
@@ -36,6 +44,10 @@ async def create_team(
     ).first()
     if team:
         raise HTTPException(400, "player already owner of team")
+
+    existing_membership = _get_team_membership(db, game.id, player.id)
+    if existing_membership:
+        raise HTTPException(400, "player already belongs to a team")
 
     teams = db.exec(select(Team).where(Team.game_id == game.id))
     team_number = max((t.team_number for t in teams), default=0)
@@ -77,9 +89,11 @@ async def join_team(
     player: Annotated[Player, Depends(get_player_in_game)],
     team: Annotated[Team, Depends(get_team)],
 ):
-    member = db.get(TeamMember, (game.id, team.id, player.id))
-    if member:
-        return member
+    existing_membership = _get_team_membership(db, game.id, player.id)
+    if existing_membership:
+        if existing_membership.team_id == team.id:
+            return existing_membership
+        raise HTTPException(400, "player already belongs to a different team")
 
     tm = TeamMember(game_id=game.id, team_id=team.id, player_id=player.id)
     db.add(tm)

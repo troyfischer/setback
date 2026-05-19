@@ -72,6 +72,7 @@ class TeamMember(SQLModel, table=True):
     player_id: str = SqlField(primary_key=True)
 
     __table_args__ = (
+        UniqueConstraint("game_id", "player_id"),
         # enforce the player exists (composite FK to Player)
         ForeignKeyConstraint(
             ["game_id", "player_id"],
