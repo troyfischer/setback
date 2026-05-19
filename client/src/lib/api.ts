@@ -68,7 +68,7 @@ export async function createDevToken(baseUrl: string, username: string) {
 export async function refreshAccessToken(baseUrl: string) {
   return requestJson<TokenResponse>(`${baseUrl}/auth/refresh`, {
     credentials: "include",
-    method: "GET",
+    method: "POST",
   });
 }
 
@@ -83,7 +83,7 @@ export async function logout(baseUrl: string, token: string) {
   const response = await fetch(`${baseUrl}/auth/logout`, {
     credentials: "include",
     headers: withBearer(token),
-    method: "GET",
+    method: "POST",
   });
 
   if (!response.ok) {

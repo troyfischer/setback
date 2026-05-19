@@ -115,7 +115,7 @@ async def oauth_callback(
     return response
 
 
-@router.get("/refresh")
+@router.post("/refresh")
 async def refresh(request: Request, db: DBSession, jwt: JwtManager):
     rt = request.cookies.get("refresh_token")
     claims = jwt.validate_refresh_token(rt or "")
@@ -141,7 +141,7 @@ async def refresh(request: Request, db: DBSession, jwt: JwtManager):
     return response
 
 
-@router.get("/logout")
+@router.post("/logout")
 async def logout(
     request: Request,
     user: Annotated[OAuthUser, Depends(get_current_user)],

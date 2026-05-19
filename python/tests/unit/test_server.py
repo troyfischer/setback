@@ -241,7 +241,7 @@ def test_oauth_callback_sets_refresh_cookie_and_refresh_succeeds(
     assert "refresh_token=" in callback_res.headers.get("set-cookie", "")
     assert "Secure" not in callback_res.headers.get("set-cookie", "")
 
-    refresh_res = client.get("/auth/refresh")
+    refresh_res = client.post("/auth/refresh")
     assert refresh_res.status_code == HTTPStatus.OK
     assert refresh_res.json()["access_token"]
     assert "refresh_token=" in refresh_res.headers.get("set-cookie", "")
@@ -280,10 +280,10 @@ def test_refresh_token_is_rotated_and_old_cookie_is_rejected(
     assert match is not None
     original_refresh = match.group(1)
 
-    refresh_res = client.get("/auth/refresh")
+    refresh_res = client.post("/auth/refresh")
     assert refresh_res.status_code == HTTPStatus.OK
 
-    stale_refresh_res = client.get(
+    stale_refresh_res = client.post(
         "/auth/refresh",
         cookies={"refresh_token": original_refresh},
     )
