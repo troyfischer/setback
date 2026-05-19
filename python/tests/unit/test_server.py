@@ -20,11 +20,11 @@ os.environ.setdefault("ENABLE_DEV_AUTH", "true")
 
 import src.game.routes.game as game_routes
 from src.auth import routes as auth_routes
-from src.config import AppEnv, Settings
 from src.auth.sso.models import OAuthUser
+from src.config import AppEnv, Settings
 from src.game.events import GameEvent
 from src.game.manager import GameStatePlayerScoped, Phase
-from src.game.models import Game, Team
+from src.game.models import Game, GameRequest, Team, UpdateTeamRequest
 from src.game.sse import ConnectionManager
 from src.main import create_app
 from tests.helpers import (
@@ -39,7 +39,6 @@ from tests.helpers import (
     play_trick,
     start_game,
 )
-from src.game.models import GameRequest, UpdateTeamRequest
 
 pytestmark = pytest.mark.unit
 
@@ -327,6 +326,24 @@ def test_create_app_accepts_custom_prod_secrets():
     )
 
 
+def test_prod_settings_use_explicit_cors_origin():
+    settings = Settings(
+        app_env=AppEnv.PROD,
+        client_origin="https://app.example.com",
+    )
+    assert settings.cors_allowed_origins == ["https://app.example.com"]
+    assert settings.cors_origin_regex is None
+
+
+def test_dev_settings_use_local_cors_regex():
+    settings = Settings(
+        app_env=AppEnv.DEV,
+        client_origin="https://app.example.com",
+    )
+    assert settings.cors_allowed_origins == []
+    assert settings.cors_origin_regex is not None
+
+
 def test_subscribe_requires_auth(client: TestClient, game: Game):
     res = client.get(f"/game/{game.id}/subscribe")
     assert res.status_code == HTTPStatus.UNAUTHORIZED
@@ -353,6 +370,77 @@ def test_subscribe_token_requires_game_membership(
         headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
     )
     assert res.status_code == HTTPStatus.FORBIDDEN
+
+
+def test_join_team_rejects_membership_in_multiple_teams(
+    client: TestClient,
+    authenticated_users: dict[str, str],
+    game: Game,
+):
+    join_game(client, authenticated_users, game, [USERS[1], USERS[2]])
+
+    team_a_res = client.post(
+        "/team/create",
+        headers={"Authorization": f"Bearer {authenticated_users[USERS[0]]}"},
+        json=GameRequest(game_id=game.id).model_dump(),
+    )
+    team_a = Team.model_validate(team_a_res.json())
+
+    team_b_res = client.post(
+        "/team/create",
+        headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
+        json=GameRequest(game_id=game.id).model_dump(),
+    )
+    team_b = Team.model_validate(team_b_res.json())
+
+    first_join = client.post(
+        "/team/join",
+        headers={"Authorization": f"Bearer {authenticated_users[USERS[2]]}"},
+        json=UpdateTeamRequest(
+            game_id=game.id, team_number=team_a.team_number
+        ).model_dump(),
+    )
+    assert first_join.status_code == HTTPStatus.OK
+
+    second_join = client.post(
+        "/team/join",
+        headers={"Authorization": f"Bearer {authenticated_users[USERS[2]]}"},
+        json=UpdateTeamRequest(
+            game_id=game.id, team_number=team_b.team_number
+        ).model_dump(),
+    )
+    assert second_join.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_create_team_rejects_player_already_on_team(
+    client: TestClient,
+    authenticated_users: dict[str, str],
+    game: Game,
+):
+    join_game(client, authenticated_users, game, [USERS[1]])
+
+    team_owner_res = client.post(
+        "/team/create",
+        headers={"Authorization": f"Bearer {authenticated_users[USERS[0]]}"},
+        json=GameRequest(game_id=game.id).model_dump(),
+    )
+    team_owner = Team.model_validate(team_owner_res.json())
+
+    join_res = client.post(
+        "/team/join",
+        headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
+        json=UpdateTeamRequest(
+            game_id=game.id, team_number=team_owner.team_number
+        ).model_dump(),
+    )
+    assert join_res.status_code == HTTPStatus.OK
+
+    create_second_team_res = client.post(
+        "/team/create",
+        headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
+        json=GameRequest(game_id=game.id).model_dump(),
+    )
+    assert create_second_team_res.status_code == HTTPStatus.BAD_REQUEST
 
 
 def test_subscribe_token_and_stream_connect(
