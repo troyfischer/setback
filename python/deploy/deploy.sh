@@ -2,117 +2,145 @@
 # Deployment script for Setback game server
 # Usage: ./deploy.sh <instance-ip>
 
-set -e
+set -euo pipefail
 
-if [ -z "$1" ]; then
-    echo "Usage: $0 <instance-ip>"
-    echo "Example: $0 54.123.45.67"
-    exit 1
-fi
-
-INSTANCE_IP=$1
-# Try DO key first, fall back to AWS key
-if [ -f "$HOME/.ssh/setback-do-key" ]; then
-    SSH_KEY="$HOME/.ssh/setback-do-key"
-else
-    SSH_KEY="$HOME/.ssh/setback-aws-key"
-fi
-DEPLOY_USER="root"  # DigitalOcean droplets use root by default
+DEPLOY_USER="root"
 APP_DIR="/opt/setback"
-
-echo "Deploying to $INSTANCE_IP..."
-
-# Create a temporary directory for deployment
-TEMP_DIR=$(mktemp -d)
-trap "rm -rf $TEMP_DIR" EXIT
-
-# Copy application files (excluding unnecessary files)
-echo "Preparing deployment package..."
-rsync -av \
-    --exclude='.git' \
-    --exclude='.venv' \
-    --exclude='__pycache__' \
-    --exclude='*.pyc' \
-    --exclude='.pytest_cache' \
-    --exclude='.mypy_cache' \
-    --exclude='.ruff_cache' \
-    --exclude='deploy' \
-    --exclude='.project' \
-    ../ "$TEMP_DIR/"
-
-# Deploy to server
-echo "Copying files to server..."
-ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$DEPLOY_USER@$INSTANCE_IP" "sudo mkdir -p $APP_DIR && sudo chown $DEPLOY_USER:$DEPLOY_USER $APP_DIR"
-rsync -av -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no" \
-    "$TEMP_DIR/" \
-    "$DEPLOY_USER@$INSTANCE_IP:$APP_DIR/"
-
-# Check if .env.production exists locally and copy it
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "$SCRIPT_DIR/.env.production" ]; then
-    echo "Copying production environment variables..."
-    scp -i "$SSH_KEY" -o StrictHostKeyChecking=no \
-        "$SCRIPT_DIR/.env.production" \
-        "$DEPLOY_USER@$INSTANCE_IP:$APP_DIR/.env"
-else
-    echo "WARNING: $SCRIPT_DIR/.env.production not found!"
-    echo "Create it from $SCRIPT_DIR/.env.production.example and set BASE_URL"
-fi
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENV_FILE="$SCRIPT_DIR/.env.production"
+REMOTE_DEPLOY_SCRIPT="$SCRIPT_DIR/remote-deploy.sh"
+TEMP_DIR=""
+INSTANCE_IP=""
+SSH_KEY=""
+PUBLIC_BASE_URL=""
 
-# Start services
-echo "Starting services..."
-ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$DEPLOY_USER@$INSTANCE_IP" << 'ENDSSH'
-set -e
+log() {
+    printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$1"
+}
 
-# Wait for docker to be ready
-echo "Checking if Docker is installed..."
-timeout=300
-elapsed=0
-while ! command -v docker &> /dev/null; do
-    if [ $elapsed -ge $timeout ]; then
-        echo "ERROR: Docker installation timed out after ${timeout}s"
-        echo "The instance may still be initializing. Check /var/log/cloud-init-output.log"
-        exit 1
+die() {
+    echo "ERROR: $1" >&2
+    exit 1
+}
+
+usage() {
+    cat <<EOF
+Usage: $0 <instance-ip>
+Example: $0 54.123.45.67
+EOF
+    exit 1
+}
+
+cleanup() {
+    if [ -n "${TEMP_DIR:-}" ] && [ -d "$TEMP_DIR" ]; then
+        rm -rf "$TEMP_DIR"
     fi
-    echo "Waiting for Docker to be installed... (${elapsed}s/${timeout}s)"
-    sleep 5
-    elapsed=$((elapsed + 5))
-done
+}
 
-# Check if docker service is running
-echo "Checking if Docker service is running..."
-if ! sudo systemctl is-active --quiet docker; then
-    echo "Starting Docker service..."
-    sudo systemctl start docker
-fi
+require_file() {
+    local path=$1
+    [ -f "$path" ] || die "Required file not found: $path"
+}
 
-# Verify docker works (may need to use newgrp or sg to activate group membership)
-if ! docker ps &> /dev/null; then
-    echo "Docker group membership not active, using sudo for docker commands..."
-    USE_SUDO="sudo"
-else
-    USE_SUDO=""
-fi
+pick_ssh_key() {
+    if [ -f "$HOME/.ssh/setback-do-key" ]; then
+        SSH_KEY="$HOME/.ssh/setback-do-key"
+    elif [ -f "$HOME/.ssh/setback-aws-key" ]; then
+        SSH_KEY="$HOME/.ssh/setback-aws-key"
+    else
+        die "No deployment SSH key found at ~/.ssh/setback-do-key or ~/.ssh/setback-aws-key"
+    fi
+}
 
-cd /opt/setback
-echo "Pulling latest images..."
-$USE_SUDO docker compose pull
+load_env() {
+    set -a
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+    set +a
 
-echo "Building application..."
-$USE_SUDO docker compose build
+    PUBLIC_BASE_URL="${BASE_URL:-}"
+}
 
-echo "Stopping existing containers..."
-$USE_SUDO docker compose down || true
+validate_env() {
+    require_file "$ENV_FILE"
+    load_env
 
-echo "Starting containers..."
-$USE_SUDO docker compose up -d
+    [ "${APP_ENV:-}" = "prod" ] || die "APP_ENV must be set to prod in $ENV_FILE"
+    [ "${AUTO_CREATE_SCHEMA:-}" = "false" ] || die "AUTO_CREATE_SCHEMA must be false in $ENV_FILE"
+    [ "${ENABLE_DEV_AUTH:-}" = "false" ] || die "ENABLE_DEV_AUTH must be false in $ENV_FILE"
+    [ -n "${BASE_URL:-}" ] || die "BASE_URL must be set in $ENV_FILE"
+    [ -n "${CLIENT_ORIGIN:-}" ] || die "CLIENT_ORIGIN must be set in $ENV_FILE"
+    [ -n "${SESSION_SECRET:-}" ] || die "SESSION_SECRET must be set in $ENV_FILE"
+    [ -n "${JWT_SECRET:-}" ] || die "JWT_SECRET must be set in $ENV_FILE"
 
-echo "Container status:"
-$USE_SUDO docker compose ps
-ENDSSH
+    [ "$SESSION_SECRET" != "CHANGE_THIS_TO_RANDOM_STRING" ] || die "SESSION_SECRET is still a placeholder"
+    [ "$JWT_SECRET" != "CHANGE_THIS_TO_A_DIFFERENT_RANDOM_STRING" ] || die "JWT_SECRET is still a placeholder"
+    require_file "$REMOTE_DEPLOY_SCRIPT"
+}
 
-echo ""
-echo "Deployment complete!"
-echo "Access your server at: http://$INSTANCE_IP"
-echo ""
-echo "To check logs: ssh -i $SSH_KEY $DEPLOY_USER@$INSTANCE_IP 'cd /opt/setback && docker compose logs -f'"
+make_temp_dir() {
+    TEMP_DIR=$(mktemp -d)
+    trap cleanup EXIT
+}
+
+prepare_release_bundle() {
+    log "Preparing deployment package"
+    rsync -av \
+        --exclude='.git' \
+        --exclude='.venv' \
+        --exclude='__pycache__' \
+        --exclude='*.pyc' \
+        --exclude='.pytest_cache' \
+        --exclude='.mypy_cache' \
+        --exclude='.ruff_cache' \
+        --exclude='deploy' \
+        --exclude='.project' \
+        "$REPO_DIR/" "$TEMP_DIR/"
+}
+
+remote_shell() {
+    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$DEPLOY_USER@$INSTANCE_IP" "$@"
+}
+
+sync_release_bundle() {
+    log "Preparing remote directory"
+    remote_shell "mkdir -p $APP_DIR"
+
+    log "Copying application files"
+    rsync -av -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no" \
+        "$TEMP_DIR/" \
+        "$DEPLOY_USER@$INSTANCE_IP:$APP_DIR/"
+
+    log "Copying production environment"
+    scp -i "$SSH_KEY" -o StrictHostKeyChecking=no \
+        "$ENV_FILE" \
+        "$DEPLOY_USER@$INSTANCE_IP:$APP_DIR/.env"
+}
+
+run_remote_deploy() {
+    log "Running remote deployment"
+    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no \
+        "$DEPLOY_USER@$INSTANCE_IP" \
+        "APP_DIR='$APP_DIR' bash -s" < "$REMOTE_DEPLOY_SCRIPT"
+}
+
+main() {
+    [ $# -eq 1 ] || usage
+
+    INSTANCE_IP=$1
+    pick_ssh_key
+    validate_env
+    make_temp_dir
+
+    log "Deploying to $INSTANCE_IP"
+    prepare_release_bundle
+    sync_release_bundle
+    run_remote_deploy
+
+    log "Deployment complete"
+    echo "Access your server at: ${PUBLIC_BASE_URL:-http://$INSTANCE_IP}"
+    echo "To check logs: ssh -i $SSH_KEY $DEPLOY_USER@$INSTANCE_IP 'cd $APP_DIR && docker compose logs -f'"
+}
+
+main "$@"
