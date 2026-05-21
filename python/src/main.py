@@ -7,15 +7,14 @@ import redis
 import redis.asyncio as redis_async
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import Engine, event
-from sqlalchemy.engine import Connection
-from sqlmodel import SQLModel, create_engine
+from sqlalchemy import Engine
 from starlette.middleware.sessions import SessionMiddleware
 
 import src.auth.dev_routes
 import src.auth.routes
 import src.game.routes
 from src.config import Settings
+from src.db import create_db_engine, create_schema
 from src.game.exceptions import InvalidGameStateException, invalid_game_state_handler
 from src.game.manager import GameManager
 from src.game.sse import ConnectionManager, RedisSubscriber
@@ -27,21 +26,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.settings = settings
 
     # relational db
-    engine: Engine = create_engine(
-        settings.database_url,
-        connect_args={},
-        pool_pre_ping=True,
-    )
-
-    if engine.dialect.name == "sqlite":
-
-        @event.listens_for(engine, "connect")
-        def set_sqlite_pragma(conn: Connection, _: object) -> None:
-            cursor = conn.cursor()
-            cursor.execute("PRAGMA foreign_keys=ON")
-            cursor.close()
-
-    SQLModel.metadata.create_all(engine)
+    engine: Engine = create_db_engine(settings)
+    if settings.should_auto_create_schema:
+        create_schema(engine)
     app.state.db_engine = engine
 
     # game management

@@ -1,7 +1,21 @@
-.PHONY: test test-unit test-integration test-all clean dev-up dev-down dev-rebuild
+.PHONY: test test-unit test-integration test-all clean dev-up dev-down dev-rebuild db-upgrade db-current db-revision
 
 init:
 	uv sync --all-extras
+
+db-upgrade:
+	uv run alembic upgrade head
+
+db-current:
+	uv run alembic current
+
+db-revision:
+	@if [ -z "$(MESSAGE)" ]; then \
+		echo "Error: MESSAGE parameter required"; \
+		echo "Usage: make db-revision MESSAGE=\"describe change\""; \
+		exit 1; \
+	fi
+	uv run alembic revision --autogenerate -m "$(MESSAGE)"
 
 utest:
 	uv run pytest tests/unit -v

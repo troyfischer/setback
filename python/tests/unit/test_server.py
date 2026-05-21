@@ -14,6 +14,7 @@ import pytest
 from fakeredis import FakeRedis
 from fakeredis.aioredis import FakeRedis as AsyncFakeRedis
 from fastapi.testclient import TestClient
+from sqlalchemy import Engine
 
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("ENABLE_DEV_AUTH", "true")
@@ -309,6 +310,7 @@ def test_create_app_rejects_default_jwt_secret_in_prod():
         create_app(
             Settings(
                 app_env=AppEnv.PROD,
+                auto_create_schema=False,
                 enable_dev_auth=False,
                 session_secret="prod-session-secret",
             )
@@ -320,15 +322,30 @@ def test_create_app_accepts_custom_prod_secrets():
         Settings(
             app_env=AppEnv.PROD,
             enable_dev_auth=False,
+            auto_create_schema=False,
             session_secret="prod-session-secret",
             jwt_secret="prod-jwt-secret",
         )
     )
 
 
+def test_create_app_rejects_auto_create_schema_in_prod():
+    with pytest.raises(RuntimeError):
+        create_app(
+            Settings(
+                app_env=AppEnv.PROD,
+                enable_dev_auth=False,
+                auto_create_schema=True,
+                session_secret="prod-session-secret",
+                jwt_secret="prod-jwt-secret",
+            )
+        )
+
+
 def test_prod_settings_use_explicit_cors_origin():
     settings = Settings(
         app_env=AppEnv.PROD,
+        auto_create_schema=False,
         client_origin="https://app.example.com",
     )
     assert settings.cors_allowed_origins == ["https://app.example.com"]
@@ -342,6 +359,45 @@ def test_dev_settings_use_local_cors_regex():
     )
     assert settings.cors_allowed_origins == []
     assert settings.cors_origin_regex is not None
+
+
+def test_dev_settings_auto_create_schema_enabled_by_default():
+    settings = Settings(app_env=AppEnv.DEV)
+    assert settings.should_auto_create_schema is True
+
+
+def test_prod_settings_auto_create_schema_disabled():
+    settings = Settings(
+        app_env=AppEnv.PROD,
+        auto_create_schema=False,
+        session_secret="prod-session-secret",
+        jwt_secret="prod-jwt-secret",
+    )
+    assert settings.should_auto_create_schema is False
+
+
+def test_lifespan_skips_create_schema_in_prod(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls: list[Engine] = []
+
+    def fake_create_schema(engine: Engine) -> None:
+        calls.append(engine)
+
+    monkeypatch.setattr("src.main.create_schema", fake_create_schema)
+
+    settings = Settings(
+        app_env=AppEnv.PROD,
+        auto_create_schema=False,
+        enable_dev_auth=False,
+        session_secret="prod-session-secret",
+        jwt_secret="prod-jwt-secret",
+    )
+
+    with TestClient(create_app(settings)):
+        pass
+
+    assert calls == []
 
 
 def test_subscribe_requires_auth(client: TestClient, game: Game):

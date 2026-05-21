@@ -16,6 +16,7 @@ class AppEnv(enum.StrEnum):
 class Settings(BaseSettings):
     app_env: AppEnv = AppEnv.DEV
     enable_dev_auth: bool = False
+    auto_create_schema: bool = True
     database_url: str = "sqlite:///database.db"
     redis_url: str = "redis://localhost:6379"
     session_secret: str = DEFAULT_SESSION_SECRET
@@ -29,6 +30,10 @@ class Settings(BaseSettings):
     @property
     def dev_auth_enabled(self) -> bool:
         return self.app_env in {AppEnv.DEV, AppEnv.TEST} and self.enable_dev_auth
+
+    @property
+    def should_auto_create_schema(self) -> bool:
+        return self.app_env in {AppEnv.DEV, AppEnv.TEST} and self.auto_create_schema
 
     @property
     def cors_allowed_origins(self) -> list[str]:
@@ -45,6 +50,8 @@ class Settings(BaseSettings):
     def validate_runtime(self) -> None:
         if self.app_env == AppEnv.PROD and self.enable_dev_auth:
             raise RuntimeError("ENABLE_DEV_AUTH cannot be enabled when APP_ENV=prod")
+        if self.app_env == AppEnv.PROD and self.auto_create_schema:
+            raise RuntimeError("AUTO_CREATE_SCHEMA cannot be enabled when APP_ENV=prod")
         if self.app_env == AppEnv.PROD and self.session_secret == DEFAULT_SESSION_SECRET:
             raise RuntimeError("SESSION_SECRET must be changed when APP_ENV=prod")
         if self.app_env == AppEnv.PROD and self.jwt_secret == DEFAULT_JWT_SECRET:
