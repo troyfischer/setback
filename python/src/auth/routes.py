@@ -5,10 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from starlette.requests import Request
 
+from src import logging
 from src.auth.cookies import clear_refresh_cookie, set_refresh_cookie
 from src.auth.jwt import JwtManager
 from src.auth.models import AuthOptions, RefreshToken, Token
-from src.auth.sso import GoogleOAuth
+from src.auth.sso import GoogleOIDC
+from src.auth.sso.base import OAuthProvider
 from src.auth.sso.models import OAuthUser
 from src.auth.utils import get_current_user
 from src.db import DBSession
@@ -16,17 +18,32 @@ from src.request import RequestContext
 
 router = APIRouter(prefix="/auth")
 
-_handlers = {h.provider: h for h in [GoogleOAuth()]}  # type: ignore[no-untyped-call]
+log = logging.new_logger("auth")
 
 
-def _get_handler(provider: str) -> GoogleOAuth:
+def _build_handlers() -> dict[str, OAuthProvider]:
+    handlers: dict[str, OAuthProvider] = {}
+    try:
+        google = GoogleOIDC()
+        handlers[google.provider] = google
+    except RuntimeError:
+        log.exception("google OIDC is not available")
+    return handlers
+
+
+_handlers = _build_handlers()
+
+
+def _get_handler(provider: str) -> OAuthProvider:
     handler = _handlers.get(provider)
     if handler is None:
         raise HTTPException(404, f"Unknown OAuth provider: {provider}")
     return handler
 
 
-def _persist_refresh_session(db: DBSession, sub: str, refresh_token: str, jwt: JwtManager) -> None:
+def _persist_refresh_session(
+    db: DBSession, sub: str, refresh_token: str, jwt: JwtManager
+) -> None:
     claims = jwt.validate_refresh_token(refresh_token)
     jti = claims.get("jti")
     if not isinstance(jti, str):

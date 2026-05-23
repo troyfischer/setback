@@ -6,6 +6,8 @@ from authlib.integrations.starlette_client import (  # pyright: ignore[reportMis
 from starlette.config import Config
 from starlette.requests import Request
 
+from src.auth.sso.models import OAuthUser
+
 config = Config()
 oauth = OAuth(config=config)  # type: ignore[no-untyped-call]
 
@@ -20,7 +22,7 @@ class OAuthProvider(ABC):
     def redirect_uri(self) -> str: ...
 
     @abstractmethod
-    async def login(self, request: Request): ...
+    async def login(self, request: Request) -> object: ...
 
     @abstractmethod
-    async def callback(self, request: Request): ...
+    async def callback(self, request: Request) -> OAuthUser: ...

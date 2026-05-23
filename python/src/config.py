@@ -52,7 +52,10 @@ class Settings(BaseSettings):
             raise RuntimeError("ENABLE_DEV_AUTH cannot be enabled when APP_ENV=prod")
         if self.app_env == AppEnv.PROD and self.auto_create_schema:
             raise RuntimeError("AUTO_CREATE_SCHEMA cannot be enabled when APP_ENV=prod")
-        if self.app_env == AppEnv.PROD and self.session_secret == DEFAULT_SESSION_SECRET:
+        if (
+            self.app_env == AppEnv.PROD
+            and self.session_secret == DEFAULT_SESSION_SECRET
+        ):
             raise RuntimeError("SESSION_SECRET must be changed when APP_ENV=prod")
         if self.app_env == AppEnv.PROD and self.jwt_secret == DEFAULT_JWT_SECRET:
             raise RuntimeError("JWT_SECRET must be changed when APP_ENV=prod")

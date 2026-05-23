@@ -18,6 +18,8 @@ from sqlalchemy import Engine
 
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("ENABLE_DEV_AUTH", "true")
+os.environ.setdefault("GOOGLE_CLIENT_ID", "test-google-client-id")
+os.environ.setdefault("GOOGLE_CLIENT_SECRET", "test-google-client-secret")
 
 import src.game.routes.game as game_routes
 from src.auth import routes as auth_routes

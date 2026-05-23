@@ -1,5 +1,3 @@
-import json
-from pathlib import Path
 from typing import final, override
 
 from pydantic_settings import BaseSettings
@@ -10,15 +8,26 @@ from src.auth.sso.base import OAuthProvider, oauth
 from src.auth.sso.models import OAuthUser
 
 
-class OAuthSettings(BaseSettings):
+class GoogleOIDCSettings(BaseSettings):
     base_url: str = "http://localhost"
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+
+    @property
+    def credentials(self) -> Credentials:
+        if not self.google_client_id or not self.google_client_secret:
+            raise RuntimeError("Google OIDC is not configured")
+        return Credentials(
+            client_id=self.google_client_id,
+            client_secret=self.google_client_secret,
+        )
 
 
 @final
-class GoogleOAuth(OAuthProvider):
-    def __init__(self):
-        creds = self.load_creds()
-        self.settings = OAuthSettings()
+class GoogleOIDC(OAuthProvider):
+    def __init__(self) -> None:
+        self.settings = GoogleOIDCSettings()
+        creds = self.settings.credentials
 
         self.client = oauth.register(
             name="google",
@@ -27,20 +36,6 @@ class GoogleOAuth(OAuthProvider):
             server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
             client_kwargs={"scope": "openid email profile"},
         )
-
-    @staticmethod
-    def load_creds() -> Credentials:
-        path = (
-            Path(__file__).resolve().parents[3]
-            / "resources"
-            / "secrets"
-            / "client_secret_876549504601-2tf3amdgcj86ub91fh0iidqq7fdva8t2.apps.googleusercontent.com.json"
-        )
-        with open(path) as fp:
-            content = json.load(fp)
-
-        creds = Credentials.model_validate(content["web"])
-        return creds
 
     @property
     @override
@@ -53,11 +48,11 @@ class GoogleOAuth(OAuthProvider):
         return "google"
 
     @override
-    async def login(self, request: Request):
+    async def login(self, request: Request) -> object:
         return await self.client.authorize_redirect(request, self.redirect_uri)
 
     @override
-    async def callback(self, request: Request):
+    async def callback(self, request: Request) -> OAuthUser:
         token = await self.client.authorize_access_token(request)
 
         return OAuthUser.model_validate(token["userinfo"])
