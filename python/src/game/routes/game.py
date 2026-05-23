@@ -17,6 +17,7 @@ from src.auth.jwt import JwtManager
 from src.auth.sso.models import OAuthUser
 from src.auth.utils import get_current_user
 from src.db import DBSession
+from src.game.limits import game_join_rate_limit, subscribe_token_rate_limit
 from src.game.manager import GameStatePlayerScoped
 from src.game.models import (
     BidRequest,
@@ -110,7 +111,7 @@ async def leave_game(
     return game
 
 
-@router.post("/join")
+@router.post("/join", dependencies=[Depends(game_join_rate_limit)])
 async def join_game(
     request: Request,
     db: DBSession,
@@ -209,7 +210,10 @@ async def sse_event_stream(
         connection_manager.disconnect(game_id, player_id, queue)
 
 
-@router.post("/{game_id}/subscribe-token")
+@router.post(
+    "/{game_id}/subscribe-token",
+    dependencies=[Depends(subscribe_token_rate_limit)],
+)
 async def create_subscribe_token(
     game_id: str,
     user: Annotated[OAuthUser, Depends(get_current_user)],
@@ -344,5 +348,10 @@ def get_game_state(
     game = db.get(Game, game_id)
     if not game:
         raise HTTPException(404, "game not found")
+
+    player = db.get(Player, (user.sub, game_id))
+    if not player:
+        raise HTTPException(403, "not an active player in game")
+
     state = ctx.gm.get_state(game)
-    return scope_state_for_player(state, user.sub)
+    return scope_state_for_player(state, player.id)

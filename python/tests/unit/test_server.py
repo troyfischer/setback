@@ -13,6 +13,7 @@ from tempfile import TemporaryDirectory
 import pytest
 from fakeredis import FakeRedis
 from fakeredis.aioredis import FakeRedis as AsyncFakeRedis
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
@@ -22,6 +23,7 @@ os.environ.setdefault("GOOGLE_CLIENT_ID", "test-google-client-id")
 os.environ.setdefault("GOOGLE_CLIENT_SECRET", "test-google-client-secret")
 
 import src.game.routes.game as game_routes
+import src.rate_limit as rate_limit
 from src.auth import routes as auth_routes
 from src.auth.sso.models import OAuthUser
 from src.config import AppEnv, Settings
@@ -59,6 +61,11 @@ def patch_redis():
     mp.setattr("src.main.redis.from_url", lambda url: fake)
     yield fake
     mp.undo()
+
+
+@pytest.fixture(autouse=True)
+def reset_redis(patch_redis: FakeRedis):
+    patch_redis.flushall()
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -292,6 +299,43 @@ def test_refresh_token_is_rotated_and_old_cookie_is_rejected(
     assert stale_refresh_res.status_code == HTTPStatus.UNAUTHORIZED
 
 
+def test_refresh_rate_limit_returns_429(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class FakeGoogleOAuth:
+        async def callback(self, request):
+            return OAuthUser(
+                at_hash="test",
+                aud="test",
+                azp="test",
+                email="player@example.com",
+                email_verified=True,
+                exp=datetime.now(),
+                family_name="Player",
+                given_name="Test",
+                iat=datetime.now(),
+                iss="test",
+                name="Test Player",
+                nonce="test",
+                picture="test",
+                sub="google-user-rate-limit",
+            )
+
+    def fake_enforce_limit(redis_client, key, *, limit, window_seconds):
+        if key.startswith("auth-refresh:ip:"):
+            raise HTTPException(429, "rate limit exceeded")
+
+    monkeypatch.setitem(auth_routes._handlers, "google", FakeGoogleOAuth())
+    monkeypatch.setattr(rate_limit, "_enforce_limit", fake_enforce_limit)
+
+    callback_res = client.get("/auth/google/callback")
+    assert callback_res.status_code == HTTPStatus.OK
+
+    refresh_res = client.post("/auth/refresh")
+    assert refresh_res.status_code == HTTPStatus.TOO_MANY_REQUESTS
+
+
 def test_dev_auth_route_is_registered_in_test_app():
     routes = {route.path for route in create_app().routes}
     assert "/auth/dev-token" in routes
@@ -428,6 +472,26 @@ def test_subscribe_token_requires_game_membership(
         headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
     )
     assert res.status_code == HTTPStatus.FORBIDDEN
+
+
+def test_join_game_rate_limit_returns_429(
+    client: TestClient,
+    authenticated_users: dict[str, str],
+    game: Game,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def fake_enforce_limit(redis_client, key, *, limit, window_seconds):
+        if key.startswith("game-join:user:"):
+            raise HTTPException(429, "rate limit exceeded")
+
+    monkeypatch.setattr(rate_limit, "_enforce_limit", fake_enforce_limit)
+
+    res = client.post(
+        "/game/join",
+        headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
+        json=GameRequest(game_id=game.id).model_dump(),
+    )
+    assert res.status_code == HTTPStatus.TOO_MANY_REQUESTS
 
 
 def test_join_team_rejects_membership_in_multiple_teams(

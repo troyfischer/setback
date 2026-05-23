@@ -23,6 +23,18 @@ class Settings(BaseSettings):
     jwt_secret: str = DEFAULT_JWT_SECRET
     jwt_algorithm: str = DEFAULT_JWT_ALGORITHM
     client_origin: str = "http://localhost:8081"
+    auth_login_rate_limit: int = 20
+    auth_login_rate_window_seconds: int = 300
+    auth_callback_rate_limit: int = 20
+    auth_callback_rate_window_seconds: int = 300
+    auth_refresh_rate_limit: int = 30
+    auth_refresh_rate_window_seconds: int = 300
+    auth_dev_token_rate_limit: int = 20
+    auth_dev_token_rate_window_seconds: int = 300
+    game_join_rate_limit: int = 30
+    game_join_rate_window_seconds: int = 300
+    game_subscribe_token_rate_limit: int = 30
+    game_subscribe_token_rate_window_seconds: int = 300
     dev_cors_origin_regex: str = (
         r"http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?"
     )

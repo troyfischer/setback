@@ -8,6 +8,7 @@ from starlette.requests import Request
 
 from src.auth.cookies import set_refresh_cookie
 from src.auth.jwt import JwtManager
+from src.auth.limits import auth_dev_token_rate_limit
 from src.auth.models import RefreshToken, Token
 from src.auth.sso.models import OAuthUser
 from src.db import DBSession
@@ -24,7 +25,7 @@ def _persist_refresh_session(db: DBSession, sub: str, refresh_token: str, jwt: J
     db.merge(RefreshToken(sub=sub, token=jti))
 
 
-@router.post("/dev-token")
+@router.post("/dev-token", dependencies=[Depends(auth_dev_token_rate_limit)])
 async def dev_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     request: Request,

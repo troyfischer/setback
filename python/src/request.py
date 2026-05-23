@@ -2,6 +2,7 @@ from typing import Annotated, cast, final
 
 from fastapi import Depends, Request
 from fastapi.datastructures import State
+from redis import Redis
 from sqlalchemy import Engine
 
 from src.config import Settings
@@ -46,6 +47,10 @@ class Context:
         Access to the websocket connection manager.
         """
         return cast(ConnectionManager, self.state.cm)
+
+    @property
+    def rate_limiter(self) -> Redis:
+        return cast(Redis, self.state.rate_limit_redis)
 
 
 def request_context(request: Request):

@@ -33,6 +33,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # game management
     sync_redis = redis.from_url(settings.redis_url)  # type: ignore[no-untyped-call]  # pyright: ignore[reportUnknownMemberType]
+    app.state.rate_limit_redis = sync_redis
     gm = GameManager(sync_redis, engine)
     app.state.gm = gm
 
@@ -49,6 +50,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # cleanup on shutdown
     await subscriber.stop()
+    sync_redis.close()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

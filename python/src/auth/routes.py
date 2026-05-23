@@ -8,6 +8,11 @@ from starlette.requests import Request
 from src import logging
 from src.auth.cookies import clear_refresh_cookie, set_refresh_cookie
 from src.auth.jwt import JwtManager
+from src.auth.limits import (
+    auth_callback_rate_limit,
+    auth_login_rate_limit,
+    auth_refresh_rate_limit,
+)
 from src.auth.models import AuthOptions, RefreshToken, Token
 from src.auth.sso import GoogleOIDC
 from src.auth.sso.base import OAuthProvider
@@ -63,7 +68,7 @@ def _issue_tokens(
     return access_token, refresh_token
 
 
-@router.get("/{provider}/login")
+@router.get("/{provider}/login", dependencies=[Depends(auth_login_rate_limit)])
 async def oauth_login(provider: str, request: Request):
     return await _get_handler(provider).login(request)
 
@@ -104,7 +109,7 @@ async def auth_options(ctx: RequestContext) -> AuthOptions:
     )
 
 
-@router.get("/{provider}/callback")
+@router.get("/{provider}/callback", dependencies=[Depends(auth_callback_rate_limit)])
 async def oauth_callback(
     ctx: RequestContext,
     provider: str,
@@ -132,7 +137,7 @@ async def oauth_callback(
     return response
 
 
-@router.post("/refresh")
+@router.post("/refresh", dependencies=[Depends(auth_refresh_rate_limit)])
 async def refresh(request: Request, db: DBSession, jwt: JwtManager):
     rt = request.cookies.get("refresh_token")
     claims = jwt.validate_refresh_token(rt or "")
