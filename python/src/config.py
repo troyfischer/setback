@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     game_join_rate_window_seconds: int = 300
     game_subscribe_token_rate_limit: int = 30
     game_subscribe_token_rate_window_seconds: int = 300
+    game_sse_connections_per_game_limit: int = 16
     dev_cors_origin_regex: str = (
         r"http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?"
     )

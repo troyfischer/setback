@@ -31,7 +31,7 @@ from src.game.models import (
     TeamWithMembers,
 )
 from src.game.scope import scope_state_for_player
-from src.game.sse import ConnectionManager
+from src.game.sse import ConnectionManager, SSEConnectionLimitExceeded
 from src.game.utils import get_game, get_player_in_game, require_owner
 from src.request import RequestContext
 
@@ -185,11 +185,11 @@ class SubscribeTokenResponse(BaseModel):
 async def sse_event_stream(
     game_id: str,
     player_id: str,
+    queue: asyncio.Queue[dict[str, object] | None],
     connection_manager: ConnectionManager,
     *,
     heartbeat_seconds: float = SSE_HEARTBEAT_SECONDS,
 ) -> AsyncGenerator[str, None]:
-    queue = connection_manager.connect(game_id, player_id)
     try:
         # Browser EventSource retry configuration
         yield f"retry: {SSE_RETRY_MILLISECONDS}\n\n"
@@ -199,6 +199,8 @@ async def sse_event_stream(
                     queue.get(),
                     timeout=heartbeat_seconds,
                 )
+                if message is None:
+                    break
                 data = json.dumps(message)
                 yield f"data: {data}\n\n"
             except TimeoutError:
@@ -279,8 +281,13 @@ async def game_subscribe(
         if not player:
             raise HTTPException(403, "not an active player in game")
 
+    try:
+        queue = ctx.cm.connect(game_id, claims["sub"])
+    except SSEConnectionLimitExceeded as exc:
+        raise HTTPException(429, str(exc)) from exc
+
     return StreamingResponse(
-        sse_event_stream(game_id, claims["sub"], ctx.cm),
+        sse_event_stream(game_id, claims["sub"], queue, ctx.cm),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

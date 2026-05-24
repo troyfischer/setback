@@ -30,7 +30,7 @@ from src.config import AppEnv, Settings
 from src.game.events import GameEvent
 from src.game.manager import GameStatePlayerScoped, Phase
 from src.game.models import Game, GameRequest, Team, UpdateTeamRequest
-from src.game.sse import ConnectionManager
+from src.game.sse import ConnectionManager, SSEConnectionLimitExceeded
 from src.main import create_app
 from tests.helpers import (
     create_and_join_teams,
@@ -613,8 +613,9 @@ def test_subscribe_rejects_token_for_different_game(
 def test_sse_event_stream_emits_keepalive_then_data():
     async def consume() -> tuple[str, str]:
         cm = ConnectionManager(max_queue_size=2)
+        queue = cm.connect(42, "player-a")
         stream = game_routes.sse_event_stream(
-            42, "player-a", cm, heartbeat_seconds=0.01
+            42, "player-a", queue, cm, heartbeat_seconds=0.01
         )
 
         retry_line = await anext(stream)
@@ -657,6 +658,45 @@ def test_sse_connection_manager_drops_oldest_message_when_queue_is_full():
     msg = asyncio.run(consume())
     assert msg["event_type"] == "card_played"
     assert msg["data"]["tag"] == "second"
+
+
+def test_sse_connection_manager_replaces_existing_player_connection():
+    cm = ConnectionManager(
+        max_connections_per_game=2,
+    )
+
+    first_queue = cm.connect("100", "player-a")
+    second_queue = cm.connect("100", "player-a")
+
+    assert first_queue.get_nowait() is None
+
+    asyncio.run(
+        cm.broadcast_to_game(
+            "100",
+            GameEvent(event_type="card_played", game_id="100", data={"tag": "latest"}),
+        )
+    )
+
+    message = second_queue.get_nowait()
+    assert message is not None
+    assert message["event_type"] == "card_played"
+    assert message["data"]["tag"] == "latest"
+
+    cm.disconnect("100", "player-a", first_queue)
+    cm.disconnect("100", "player-a", second_queue)
+
+
+def test_sse_connection_manager_rejects_new_player_at_game_limit():
+    cm = ConnectionManager(max_connections_per_game=2)
+
+    queue1 = cm.connect("100", "player-a")
+    queue2 = cm.connect("100", "player-b")
+
+    with pytest.raises(SSEConnectionLimitExceeded):
+        cm.connect("100", "player-c")
+
+    cm.disconnect("100", "player-a", queue1)
+    cm.disconnect("100", "player-b", queue2)
 
 
 def _start_game_request(client, token, game_id):
@@ -707,7 +747,9 @@ def test_cannot_start_game_with_empty_team(
     client.post(
         "/team/leave",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[0]]}"},
-        json=UpdateTeamRequest(game_id=game.id, team_number=team_a.team_number).model_dump(),
+        json=UpdateTeamRequest(
+            game_id=game.id, team_number=team_a.team_number
+        ).model_dump(),
     )
 
     # user1 creates team B (auto-joins)
@@ -747,7 +789,9 @@ def test_cannot_start_game_with_unequal_teams(
     client.post(
         "/team/join",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[2]]}"},
-        json=UpdateTeamRequest(game_id=game.id, team_number=team_a.team_number).model_dump(),
+        json=UpdateTeamRequest(
+            game_id=game.id, team_number=team_a.team_number
+        ).model_dump(),
     )
 
     res = _start_game_request(client, authenticated_users[USERS[0]], game.id)

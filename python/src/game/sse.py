@@ -18,40 +18,47 @@ from src.logging import new_logger
 logger = new_logger(__name__)
 
 
-type ClientQueue = asyncio.Queue[dict[str, Any]]
+type ClientEvent = dict[str, Any] | None
+type ClientQueue = asyncio.Queue[ClientEvent]
+
+
+class SSEConnectionLimitExceeded(Exception):
+    """Raised when an SSE connection cap is exceeded."""
 
 
 class GameSubscribers:
     """
-    Active SSE queues for a single game, grouped by `player_id`.
+    Active SSE queues for a single game, keyed by `player_id`.
 
-    A single player may hold multiple queues (e.g. multiple tabs). Grouping by
-    player_id is what lets `ConnectionManager.broadcast_to_game` send each
-    player a state scoped to their own hand instead of the full table.
+    Each player gets at most one live SSE queue per game. If the same player
+    reconnects, the newer queue replaces the older one.
     """
 
     def __init__(self) -> None:
-        self._by_player: dict[PlayerId, set[ClientQueue]] = {}
+        self._by_player: dict[PlayerId, ClientQueue] = {}
 
-    def add(self, player_id: PlayerId, queue: ClientQueue) -> None:
-        self._by_player.setdefault(player_id, set()).add(queue)
+    def replace(self, player_id: PlayerId, queue: ClientQueue) -> ClientQueue | None:
+        previous = self._by_player.get(player_id)
+        self._by_player[player_id] = queue
+        return previous
 
     def remove(self, player_id: PlayerId, queue: ClientQueue) -> None:
-        queues = self._by_player.get(player_id)
-        if not queues:
+        current = self._by_player.get(player_id)
+        if current is None or current is not queue:
             return
-        queues.discard(queue)
-        if not queues:
-            del self._by_player[player_id]
+        del self._by_player[player_id]
 
     def is_empty(self) -> bool:
         return not self._by_player
 
     @property
     def connection_count(self) -> int:
-        return sum(len(queues) for queues in self._by_player.values())
+        return len(self._by_player)
 
-    def items(self) -> ItemsView[PlayerId, set[ClientQueue]]:
+    def has_player(self, player_id: PlayerId) -> bool:
+        return player_id in self._by_player
+
+    def items(self) -> ItemsView[PlayerId, ClientQueue]:
         return self._by_player.items()
 
 
@@ -63,15 +70,33 @@ class ConnectionManager:
     by game and then by player so broadcasts can apply per-player scoping.
     """
 
-    def __init__(self, max_queue_size: int = 64):
+    def __init__(
+        self,
+        max_queue_size: int = 64,
+        *,
+        max_connections_per_game: int = 16,
+    ):
         self._games: dict[GameId, GameSubscribers] = {}
         self.max_queue_size = max_queue_size
+        self.max_connections_per_game = max_connections_per_game
 
     def connect(self, game_id: GameId, player_id: PlayerId) -> ClientQueue:
         """Register a new SSE client and return its message queue."""
-        queue: ClientQueue = asyncio.Queue(maxsize=self.max_queue_size)
         subs = self._games.setdefault(game_id, GameSubscribers())
-        subs.add(player_id, queue)
+        if (
+            subs.connection_count >= self.max_connections_per_game
+            and not subs.has_player(player_id)
+        ):
+            raise SSEConnectionLimitExceeded("too many active SSE connections for game")
+
+        queue: ClientQueue = asyncio.Queue(maxsize=self.max_queue_size)
+        previous = subs.replace(player_id, queue)
+        if previous is not None:
+            try:
+                previous.put_nowait(None)
+            except asyncio.QueueFull:
+                _ = previous.get_nowait()
+                previous.put_nowait(None)
         logger.info(
             "client connected",
             game_id=game_id,
@@ -115,7 +140,7 @@ class ConnectionManager:
             )
             return
 
-        for player_id, queues in subs.items():
+        for player_id, queue in subs.items():
             payload_data: dict[str, Any] = event.data
             try:
                 payload_data = (
@@ -131,20 +156,19 @@ class ConnectionManager:
                 "game_id": event.game_id,
                 "data": payload_data,
             }
-            for queue in list(queues):
-                try:
-                    queue.put_nowait(payload)
-                except asyncio.QueueFull:
-                    # Drop the oldest event for slow consumers, then enqueue the latest.
-                    _ = queue.get_nowait()
-                    queue.put_nowait(payload)
-                except Exception as e:
-                    logger.error(
-                        "error broadcasting to client",
-                        game_id=game_id,
-                        player_id=player_id,
-                        error=str(e),
-                    )
+            try:
+                queue.put_nowait(payload)
+            except asyncio.QueueFull:
+                # Drop the oldest event for slow consumers, then enqueue the latest.
+                _ = queue.get_nowait()
+                queue.put_nowait(payload)
+            except Exception as e:
+                logger.error(
+                    "error broadcasting to client",
+                    game_id=game_id,
+                    player_id=player_id,
+                    error=str(e),
+                )
 
 
 class RedisMessage(TypedDict):

@@ -38,7 +38,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.gm = gm
 
     # websocket connection management
-    cm = ConnectionManager()
+    cm = ConnectionManager(
+        max_connections_per_game=settings.game_sse_connections_per_game_limit,
+    )
     app.state.cm = cm
 
     # redis subscriber for pub/sub
