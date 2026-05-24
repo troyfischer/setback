@@ -394,29 +394,25 @@ export function LobbyScreen() {
         <div className={`${glassPanel} p-6 gap-5`}>
           <div>
             {lobbyState && lobbyState.players.length > 0 ? (
-              <table className="mt-2 w-full text-sm">
-                <thead>
-                  <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-blue-200/60">
-                    <th className="pb-1.5">Active Players</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <div className="mt-2">
+                <p className="pb-2 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-blue-200/60">
+                  Active Players
+                </p>
+                <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3">
                   {lobbyState.players.map((player) => (
-                    <tr
+                    <div
                       key={player}
-                      className="border-t border-slate-200 dark:border-blue-200/20"
+                      className="flex min-h-14 items-center rounded-2xl border border-slate-200/80 bg-white/55 px-4 py-3 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.05]"
                     >
-                      <td className="py-2 flex items-center gap-2.5">
-                        <div className="inline-flex items-center justify-center rounded-full bg-blue-300 dark:bg-blue-700 px-4 py-1.5 text-xs font-extrabold text-blue-950 dark:text-blue-100">
-                          <span className="font-semibold text-gray-900 dark:text-white">
-                            {player}
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
+                      <div className="inline-flex items-center justify-center rounded-full bg-blue-300 px-3 py-1.5 text-xs font-extrabold text-blue-950 dark:bg-blue-700 dark:text-blue-100">
+                        <span className="font-semibold text-gray-900 dark:text-white">
+                          {player}
+                        </span>
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+              </div>
             ) : (
               <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white mt-0.5">
                 Waiting for players...

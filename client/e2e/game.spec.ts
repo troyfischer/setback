@@ -16,6 +16,13 @@ async function playGame(browser: Browser, teams: string[][]) {
   const allPages = allNames.map((n) => pages.get(n)!);
   const ownerPage = allPages[0]!;
 
+  const teamGridFor = (page: Page) =>
+    page
+      .getByRole("heading", { name: /teams/i })
+      .locator("..")
+      .locator("..")
+      .locator(".grid.grid-cols-2.gap-3");
+
   // --- Owner creates the game ---
   await ownerPage.getByRole("button", { name: /create game/i }).click();
   const codeEl = ownerPage.locator("p.font-mono");
@@ -27,7 +34,8 @@ async function playGame(browser: Browser, teams: string[][]) {
     const page = pages.get(name)!;
     await page.getByPlaceholder(/abc123/i).fill(joinCode);
     await page.getByRole("button", { name: /join game/i }).click();
-    await expect(page.getByText(/game #/i)).toBeVisible();
+    await page.waitForURL(`**/lobby/${joinCode}`, { timeout: 15000 });
+    await expect(page.getByRole("heading", { name: /teams/i })).toBeVisible();
   }
 
   // --- First player of each team creates the team (auto-joined), rest join ---
@@ -35,21 +43,22 @@ async function playGame(browser: Browser, teams: string[][]) {
     const team = teams[t]!;
     const creator = pages.get(team[0]!)!;
     await creator.getByRole("button", { name: /\+ new team/i }).click();
-    await expect(ownerPage.locator(".grid-cols-2 > div")).toHaveCount(t + 1, {
-      timeout: 8000,
-    });
+    await expect(teamGridFor(ownerPage).locator(":scope > div")).toHaveCount(
+      t + 1,
+      {
+        timeout: 8000,
+      },
+    );
 
     for (const member of team.slice(1)) {
       const memberPage = pages.get(member)!;
-      await memberPage
-        .locator(".grid-cols-2 > div")
-        .nth(t)
-        .getByRole("button", { name: /join/i })
-        .click();
-      await memberPage.waitForResponse(
-        (res) => res.url().includes("/team/join"),
-        { timeout: 3000 },
-      );
+      const targetTeam = teamGridFor(memberPage).locator(":scope > div").nth(t);
+      await Promise.all([
+        memberPage.waitForResponse((res) => res.url().includes("/team/join"), {
+          timeout: 3000,
+        }),
+        targetTeam.getByRole("button", { name: /join/i }).click(),
+      ]);
     }
   }
 

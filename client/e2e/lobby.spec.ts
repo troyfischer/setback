@@ -36,16 +36,19 @@ test("second player can join via code and both see the lobby", async ({
 
   // Owner creates game
   await ownerPage.getByRole("button", { name: /create game/i }).click();
-  const codeText = await ownerPage.getByText(/\d+-\w+/).textContent();
-  const joinCode = codeText?.trim() ?? "";
+  const codeEl = ownerPage.locator("p.font-mono");
+  await expect(codeEl).toBeVisible();
+  const joinCode = ((await codeEl.textContent()) ?? "").trim();
 
   // Member joins
   await memberPage.getByPlaceholder(/abc123/i).fill(joinCode);
   await memberPage.getByRole("button", { name: /join game/i }).click();
 
   // Both should see the table
-  await expect(ownerPage.getByText(/game #/i)).toBeVisible();
-  await expect(memberPage.getByText(/game #/i)).toBeVisible();
+  await ownerPage.waitForURL(`**/lobby/${joinCode}`, { timeout: 15000 });
+  await memberPage.waitForURL(`**/lobby/${joinCode}`, { timeout: 15000 });
+  await expect(ownerPage.getByRole("heading", { name: /teams/i })).toBeVisible();
+  await expect(memberPage.getByRole("heading", { name: /teams/i })).toBeVisible();
 
   await ownerCtx.close();
   await memberCtx.close();

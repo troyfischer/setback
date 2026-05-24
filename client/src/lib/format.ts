@@ -29,6 +29,10 @@ export function formatPhase(phase: GameStatePlayerScoped["phase"]): string {
   return phase.charAt(0).toUpperCase() + phase.slice(1);
 }
 
+export function formatSuitSymbol(suit: SetbackCard["suit"]): string {
+  return suitSymbols[suit];
+}
+
 export function formatCard(card: SetbackCard): string {
   const face =
     card.value === 14 || card.value === 1
@@ -41,7 +45,7 @@ export function formatCard(card: SetbackCard): string {
             ? "J"
             : String(card.value);
 
-  return `${face}${suitSymbols[card.suit]}`;
+  return `${face}${formatSuitSymbol(card.suit)}`;
 }
 
 export function getCurrentTurn(state: GameStatePlayerScoped): ModIndex {

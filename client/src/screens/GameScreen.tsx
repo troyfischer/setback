@@ -9,6 +9,7 @@ import { bidGame, fetchGameState, playCard } from "../lib/api";
 import {
   formatCard,
   formatPhase,
+  formatSuitSymbol,
   getCurrentTurnPlayer,
   getMyHand,
   isCardPlayable,
@@ -23,6 +24,13 @@ import type {
 const BID_OPTIONS = [0, 2, 3, 4] as const;
 
 type SubscriptionStatus = "idle" | "connecting" | "live" | "error";
+
+const suitNames = {
+  club: "clubs",
+  diamond: "diamonds",
+  heart: "hearts",
+  spade: "spades",
+} as const;
 
 const glassPanel = [
   "rounded-3xl backdrop-blur-xl border shadow-xl flex flex-col gap-4",
@@ -162,6 +170,7 @@ export function GameScreen() {
   const yourTurn = currentPlayer?.player_id === currentUser.sub;
   const canPlay = gs.phase === "play" && yourTurn;
   const dealer = gs.order.order[gs.active_round.dealer.idx];
+  const trumpIsRed = trump === "heart" || trump === "diamond";
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-5 py-8">
@@ -266,11 +275,27 @@ export function GameScreen() {
                 <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-blue-200/60">
                   Trump
                 </p>
-                <p className="text-xl font-extrabold text-gray-900 dark:text-white">
-                  {trump
-                    ? trump.charAt(0).toUpperCase() + trump.slice(1)
-                    : "Not set"}
-                </p>
+                {trump ? (
+                  <div
+                    className={[
+                      "flex items-center gap-2",
+                      trumpIsRed
+                        ? "text-[#b43c2a]"
+                        : "text-[#0d1d31] dark:text-white",
+                    ].join(" ")}
+                  >
+                    <span className="text-2xl font-extrabold">
+                      {formatSuitSymbol(trump)}
+                    </span>
+                    <span className="text-xl font-extrabold capitalize">
+                      {suitNames[trump]}
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-xl font-extrabold text-gray-900 dark:text-white">
+                    Not set
+                  </p>
+                )}
               </div>
               <div className="flex flex-col gap-1 min-w-[130px]">
                 <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-blue-200/60">
