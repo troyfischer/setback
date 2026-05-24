@@ -48,6 +48,32 @@ from tests.helpers import (
 pytestmark = pytest.mark.unit
 
 USERS = [f"user{i}" for i in range(6)]
+PROD_SESSION_SECRET = "prod-session-secret-1234567890abcdef"
+PROD_JWT_SECRET = "prod-jwt-secret-1234567890abcdef"
+PROD_BASE_URL = "https://setback.example.com"
+PROD_CLIENT_ORIGIN = "https://app.example.com"
+PROD_DATABASE_URL = "postgresql://app:prod-db-password@db.example.com:5432/appdb"
+PROD_REDIS_URL = "redis://redis.example.com:6379/0"
+PROD_GOOGLE_CLIENT_ID = "prod-google-client-id"
+PROD_GOOGLE_CLIENT_SECRET = "prod-google-client-secret"
+
+
+def prod_settings(**overrides) -> Settings:
+    values = {
+        "app_env": AppEnv.PROD,
+        "enable_dev_auth": False,
+        "auto_create_schema": False,
+        "session_secret": PROD_SESSION_SECRET,
+        "jwt_secret": PROD_JWT_SECRET,
+        "base_url": PROD_BASE_URL,
+        "client_origin": PROD_CLIENT_ORIGIN,
+        "database_url": PROD_DATABASE_URL,
+        "redis_url": PROD_REDIS_URL,
+        "google_client_id": PROD_GOOGLE_CLIENT_ID,
+        "google_client_secret": PROD_GOOGLE_CLIENT_SECRET,
+    }
+    values.update(overrides)
+    return Settings(**values)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -57,8 +83,8 @@ def patch_redis():
     mp = MonkeyPatch()
     fake = FakeRedis()
     async_fake = AsyncFakeRedis()
-    mp.setattr("src.main.redis_async.from_url", lambda url: async_fake)
-    mp.setattr("src.main.redis.from_url", lambda url: fake)
+    mp.setattr("src.main.redis_async.from_url", lambda _: async_fake)
+    mp.setattr("src.main.redis.from_url", lambda _: fake)
     yield fake
     mp.undo()
 
@@ -292,10 +318,9 @@ def test_refresh_token_is_rotated_and_old_cookie_is_rejected(
     refresh_res = client.post("/auth/refresh")
     assert refresh_res.status_code == HTTPStatus.OK
 
-    stale_refresh_res = client.post(
-        "/auth/refresh",
-        cookies={"refresh_token": original_refresh},
-    )
+    with TestClient(create_app()) as stale_client:
+        stale_client.cookies.set("refresh_token", original_refresh)
+        stale_refresh_res = stale_client.post("/auth/refresh")
     assert stale_refresh_res.status_code == HTTPStatus.UNAUTHORIZED
 
 
@@ -343,49 +368,23 @@ def test_dev_auth_route_is_registered_in_test_app():
 
 def test_create_app_rejects_dev_auth_in_prod():
     with pytest.raises(RuntimeError):
-        create_app(
-            Settings(
-                app_env=AppEnv.PROD,
-                enable_dev_auth=True,
-            )
-        )
+        create_app(prod_settings(enable_dev_auth=True))
 
 
 def test_create_app_rejects_default_jwt_secret_in_prod():
     with pytest.raises(RuntimeError):
         create_app(
-            Settings(
-                app_env=AppEnv.PROD,
-                auto_create_schema=False,
-                enable_dev_auth=False,
-                session_secret="prod-session-secret",
-            )
+            prod_settings(jwt_secret="your-secret-key-change-this-in-production")
         )
 
 
 def test_create_app_accepts_custom_prod_secrets():
-    create_app(
-        Settings(
-            app_env=AppEnv.PROD,
-            enable_dev_auth=False,
-            auto_create_schema=False,
-            session_secret="prod-session-secret",
-            jwt_secret="prod-jwt-secret",
-        )
-    )
+    create_app(prod_settings())
 
 
 def test_create_app_rejects_auto_create_schema_in_prod():
     with pytest.raises(RuntimeError):
-        create_app(
-            Settings(
-                app_env=AppEnv.PROD,
-                enable_dev_auth=False,
-                auto_create_schema=True,
-                session_secret="prod-session-secret",
-                jwt_secret="prod-jwt-secret",
-            )
-        )
+        create_app(prod_settings(auto_create_schema=True))
 
 
 def test_prod_settings_use_explicit_cors_origin():
@@ -413,12 +412,7 @@ def test_dev_settings_auto_create_schema_enabled_by_default():
 
 
 def test_prod_settings_auto_create_schema_disabled():
-    settings = Settings(
-        app_env=AppEnv.PROD,
-        auto_create_schema=False,
-        session_secret="prod-session-secret",
-        jwt_secret="prod-jwt-secret",
-    )
+    settings = prod_settings()
     assert settings.should_auto_create_schema is False
 
 
@@ -432,13 +426,7 @@ def test_lifespan_skips_create_schema_in_prod(
 
     monkeypatch.setattr("src.main.create_schema", fake_create_schema)
 
-    settings = Settings(
-        app_env=AppEnv.PROD,
-        auto_create_schema=False,
-        enable_dev_auth=False,
-        session_secret="prod-session-secret",
-        jwt_secret="prod-jwt-secret",
-    )
+    settings = prod_settings()
 
     with TestClient(create_app(settings)):
         pass

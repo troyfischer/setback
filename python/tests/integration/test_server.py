@@ -27,6 +27,13 @@ from tests.helpers import (
 pytestmark = pytest.mark.integration
 
 USERS = [f"user{i}" for i in range(6)]
+TEST_SESSION_SECRET = "itest-session-secret-1234567890abcdef"
+TEST_JWT_SECRET = "itest-jwt-secret-1234567890abcdef"
+TEST_BASE_URL = "http://localhost"
+TEST_CLIENT_ORIGIN = "http://localhost:8081"
+TEST_GOOGLE_CLIENT_ID = "itest-google-client-id"
+TEST_GOOGLE_CLIENT_SECRET = "itest-google-client-secret"
+TEST_POSTGRES_PASSWORD = "itest-postgres-password"
 
 log = new_logger("server-integration")
 
@@ -50,6 +57,13 @@ def docker_compose(base_url: str):
     os.environ["CADDYFILE"] = "./Caddyfile.local"
     os.environ.setdefault("APP_ENV", "test")
     os.environ.setdefault("ENABLE_DEV_AUTH", "true")
+    os.environ.setdefault("BASE_URL", TEST_BASE_URL)
+    os.environ.setdefault("CLIENT_ORIGIN", TEST_CLIENT_ORIGIN)
+    os.environ.setdefault("SESSION_SECRET", TEST_SESSION_SECRET)
+    os.environ.setdefault("JWT_SECRET", TEST_JWT_SECRET)
+    os.environ.setdefault("GOOGLE_CLIENT_ID", TEST_GOOGLE_CLIENT_ID)
+    os.environ.setdefault("GOOGLE_CLIENT_SECRET", TEST_GOOGLE_CLIENT_SECRET)
+    os.environ.setdefault("POSTGRES_PASSWORD", TEST_POSTGRES_PASSWORD)
 
     compose = DockerCompose(
         project_root,
