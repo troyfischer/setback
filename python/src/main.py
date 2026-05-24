@@ -13,7 +13,7 @@ from starlette.middleware.sessions import SessionMiddleware
 import src.auth.dev_routes
 import src.auth.routes
 import src.game.routes
-from src.config import Settings
+from src.config import AppEnv, Settings
 from src.db import create_db_engine, create_schema
 from src.game.exceptions import InvalidGameStateException, invalid_game_state_handler
 from src.game.manager import GameManager
@@ -75,7 +75,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
         allow_methods=["*"],
     )
-    app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=settings.session_secret,
+        https_only=settings.app_env == AppEnv.PROD,
+    )
     app.include_router(src.auth.routes.router)
     if settings.dev_auth_enabled:
         app.include_router(src.auth.dev_routes.router)
