@@ -1,5 +1,17 @@
 .PHONY: test test-unit test-integration test-all clean dev-up dev-down dev-rebuild db-upgrade db-current db-revision
 
+DEV_ENV = \
+	APP_ENV=dev \
+	ENABLE_DEV_AUTH=1 \
+	CADDYFILE=./Caddyfile.local \
+	BASE_URL=http://localhost \
+	CLIENT_ORIGIN=http://localhost:8081 \
+	SESSION_SECRET=dev-session-secret-1234567890abcdef \
+	JWT_SECRET=dev-jwt-secret-1234567890abcdef \
+	GOOGLE_CLIENT_ID=dev-google-client-id \
+	GOOGLE_CLIENT_SECRET=dev-google-client-secret \
+	POSTGRES_PASSWORD=dev-postgres-password
+
 init:
 	uv sync --all-extras
 
@@ -37,10 +49,10 @@ test-all:
 	uv run pytest tests -v
 
 dev-up:
-	ENABLE_DEV_AUTH=1 CADDYFILE=./Caddyfile.local docker compose up -d
+	$(DEV_ENV) docker compose up -d
 
 dev-rebuild:
-	ENABLE_DEV_AUTH=1 CADDYFILE=./Caddyfile.local docker compose up -d --build
+	$(DEV_ENV) docker compose up -d --build
 
 dev-down:
 	docker compose down
