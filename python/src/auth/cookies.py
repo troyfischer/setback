@@ -17,7 +17,11 @@ def refresh_cookie_secure(request: Request) -> bool:
     return host not in _LOCAL_DEV_HOSTS
 
 
-def set_refresh_cookie(response: Response, request: Request, refresh_token: str) -> None:
+def set_refresh_cookie(
+    response: Response,
+    request: Request,
+    refresh_token: str,
+) -> None:
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,

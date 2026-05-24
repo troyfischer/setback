@@ -24,7 +24,11 @@ router = APIRouter(
 )
 
 
-def _get_team_membership(db: DBSession, game_id: str, player_id: str) -> TeamMember | None:
+def _get_team_membership(
+    db: DBSession,
+    game_id: str,
+    player_id: str,
+) -> TeamMember | None:
     return db.exec(
         select(TeamMember).where(
             (TeamMember.game_id == game_id) & (TeamMember.player_id == player_id)

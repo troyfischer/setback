@@ -16,7 +16,12 @@ from src.db import DBSession
 router = APIRouter(prefix="/auth", tags=["auth-dev"])
 
 
-def _persist_refresh_session(db: DBSession, sub: str, refresh_token: str, jwt: JwtManager) -> None:
+def _persist_refresh_session(
+    db: DBSession,
+    sub: str,
+    refresh_token: str,
+    jwt: JwtManager,
+) -> None:
     claims = jwt.validate_refresh_token(refresh_token)
     jti = claims.get("jti")
     if not isinstance(jti, str):

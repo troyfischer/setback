@@ -4,7 +4,8 @@ from typing import Annotated
 from fastapi import Depends
 from sqlalchemy import Engine, event
 from sqlalchemy.engine import Connection
-from sqlmodel import SQLModel, Session, create_engine
+from sqlmodel import Session, SQLModel, create_engine
+
 from src.config import Settings
 from src.request import RequestContext
 
