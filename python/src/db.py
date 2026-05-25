@@ -1,9 +1,9 @@
 from collections.abc import Generator
+from typing import Any
 from typing import Annotated
 
 from fastapi import Depends
 from sqlalchemy import Engine, event
-from sqlalchemy.engine import Connection
 from sqlmodel import Session, SQLModel, create_engine
 
 from src.config import Settings
@@ -20,7 +20,7 @@ def create_db_engine(settings: Settings) -> Engine:
     if engine.dialect.name == "sqlite":
 
         @event.listens_for(engine, "connect")
-        def set_sqlite_pragma(conn: Connection, _: object) -> None:
+        def set_sqlite_pragma(conn: Any, _: object) -> None:
             cursor = conn.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.close()
