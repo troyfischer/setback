@@ -14,7 +14,13 @@ const suitSymbols: Record<SetbackCard["suit"], string> = {
 
 export function getDefaultApiBaseUrl(): string {
   const envUrl = import.meta.env.VITE_SETBACK_API_URL as string | undefined;
-  return envUrl ? normalizeBaseUrl(envUrl) : "http://localhost";
+  if (envUrl) {
+    return normalizeBaseUrl(envUrl);
+  }
+  if (typeof window !== "undefined" && window.location.origin) {
+    return normalizeBaseUrl(window.location.origin);
+  }
+  return "http://localhost";
 }
 
 export function normalizeBaseUrl(value: string): string {
