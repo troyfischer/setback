@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sync Python dependencies
+        working-directory: python
+        run: uv sync --all-extras
+
+      - name: Run Python unit tests
+        working-directory: python
+        run: uv run pytest tests/unit/test_server.py -q
+
+      - name: Run Python typecheck
+        working-directory: python
+        run: uv run mypy src
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Run client typecheck
+        working-directory: client
+        run: npm run typecheck
+
+  deploy:
+    name: Deploy Production
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install deploy SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/setback-do-key
+          chmod 600 ~/.ssh/setback-do-key
+
+      - name: Render production env file
+        run: |
+          cat > python/deploy/.env.production <<EOF
+          APP_ENV=prod
+          AUTO_CREATE_SCHEMA=false
+          ENABLE_DEV_AUTH=false
+          BASE_URL=${{ vars.BASE_URL }}
+          CLIENT_ORIGIN=${{ vars.CLIENT_ORIGIN }}
+          DATABASE_URL=${{ secrets.DATABASE_URL }}
+          REDIS_URL=${{ vars.REDIS_URL }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          SESSION_SECRET=${{ secrets.SESSION_SECRET }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+          EOF
+
+      - name: Deploy application
+        working-directory: python
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+        run: ./deploy/deploy.sh "$DEPLOY_HOST"
