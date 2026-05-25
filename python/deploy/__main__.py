@@ -8,11 +8,7 @@ domain_name = config.get("domain") or "setback.troyfischer.net"
 base_domain = "troyfischer.net"
 
 # 1. Upload SSH Key to DigitalOcean
-# Make sure this key exists - we'll use the same naming convention
 key_path = os.path.expanduser("~/.ssh/setback-do-key.pub")
-if not os.path.exists(key_path):
-    # Fall back to AWS key if DO key doesn't exist yet
-    key_path = os.path.expanduser("~/.ssh/setback-aws-key.pub")
 
 with open(key_path, "r") as key_file:
     public_key_content = key_file.read()

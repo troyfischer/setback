@@ -47,10 +47,8 @@ require_file() {
 pick_ssh_key() {
     if [ -f "$HOME/.ssh/setback-do-key" ]; then
         SSH_KEY="$HOME/.ssh/setback-do-key"
-    elif [ -f "$HOME/.ssh/setback-aws-key" ]; then
-        SSH_KEY="$HOME/.ssh/setback-aws-key"
     else
-        die "No deployment SSH key found at ~/.ssh/setback-do-key or ~/.ssh/setback-aws-key"
+        die "No deployment SSH key found at ~/.ssh/setback-do-key"
     fi
 }
 
