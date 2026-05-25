@@ -51,7 +51,7 @@ log "Starting database dependencies"
 compose up -d --wait postgres redis
 
 log "Running database migrations"
-compose run --rm --no-deps web /app/.venv/bin/alembic upgrade head
+compose run --rm --no-deps -T web /app/.venv/bin/alembic upgrade head < /dev/null
 
 log "Starting application services"
 compose up -d web caddy
