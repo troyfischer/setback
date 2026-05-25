@@ -40,7 +40,7 @@ function AppContent() {
 
   return (
     <div className="relative min-h-dvh">
-      <div className="fixed top-4 right-4 z-50">
+      <div className="fixed right-4 bottom-4 z-50 md:top-4 md:bottom-auto">
         <ThemeToggle theme={theme} onToggle={toggleTheme} />
       </div>
       <Routes>
