@@ -7,6 +7,7 @@ services:
       - "443:443/udp" # HTTP/3 support
     volumes:
       - ${CADDYFILE:-./Caddyfile}:/etc/caddy/Caddyfile
+      - ./client-dist:/srv/client:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

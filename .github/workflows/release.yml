@@ -64,6 +64,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
       - name: Install deploy SSH key
         run: |
           mkdir -p ~/.ssh
@@ -72,7 +79,7 @@ jobs:
 
       - name: Render production env file
         run: |
-          cat > python/deploy/.env.production <<EOF
+          cat > deploy/.env.production <<EOF
           APP_ENV=prod
           AUTO_CREATE_SCHEMA=false
           ENABLE_DEV_AUTH=false
@@ -88,7 +95,6 @@ jobs:
           EOF
 
       - name: Deploy application
-        working-directory: python
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
         run: ./deploy/deploy.sh "$DEPLOY_HOST"
