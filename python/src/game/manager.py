@@ -199,7 +199,6 @@ class BidRound(TurnBased[Bid]):
             raise InvalidGameStateException(
                 "cannot get highest bid from empty bid round"
             )
-
         return max(self.collection, key=lambda b: b.amount)
 
 
@@ -410,8 +409,19 @@ class GameState(_GameState):
         """
         match self.phase:
             case Phase.BID:
-                bid = self.active_round.bid.highest_bid
-                self.active_round.start_trick(turn=self.order.get_idx(bid.player_id))
+                max_bid = self.active_round.bid.highest_bid
+                if max_bid.amount == 0:
+                    # the dealer must accept a bid of 2 if nobody else bids
+                    # a max bid of 0 means everyone passed
+                    dealer_id = self.order[self.active_round.dealer].player_id
+                    max_bid = Bid(amount=2, player_id=dealer_id)
+                    self.log.debug(
+                        "assigning dealer to default bid of 2", dealer_id=dealer_id
+                    )
+
+                self.active_round.start_trick(
+                    turn=self.order.get_idx(max_bid.player_id)
+                )
                 self.phase = Phase.PLAY
             case Phase.PLAY:
                 for team_id in self.score:

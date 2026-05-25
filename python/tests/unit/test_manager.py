@@ -12,9 +12,13 @@ from src.game.manager import (
     Bid,
     BidRound,
     Dealer,
+    GamePlayer,
     GameRound,
+    GameState,
     ModIdx,
+    Phase,
     PlayedCard,
+    PlayerOrder,
     RoundScore,
     Trick,
 )
@@ -230,6 +234,63 @@ class TestBidRound:
             else contextlib.nullcontext()
         ):
             assert bid_round.highest_bid == expected
+
+
+class TestGameStateBidding:
+    @pytest.fixture
+    def game_state(self) -> GameState:
+        return GameState(
+            game_id=GAME_ID,
+            max_score=11,
+            phase=Phase.BID,
+            score={TEAM_A: 0, TEAM_B: 0},
+            order=PlayerOrder(
+                order=[
+                    GamePlayer(player_id="A1", team_id=TEAM_A, turn=0),
+                    GamePlayer(player_id="B1", team_id=TEAM_B, turn=1),
+                    GamePlayer(player_id="A2", team_id=TEAM_A, turn=2),
+                    GamePlayer(player_id="B2", team_id=TEAM_B, turn=3),
+                ]
+            ),
+            active_round=GameRound(
+                game_id=GAME_ID,
+                trump=None,
+                hands=[[], [], [], []],
+                dealer=ModIdx(idx=3, mod=4),
+                bid=BidRound(game_id=GAME_ID, turn=ModIdx(idx=0, mod=4)),
+                trick=None,
+            ),
+        )
+
+    def test_next_phase_keeps_non_pass_high_bid(self, game_state: GameState):
+        game_state.active_round.bid.collection = [
+            Bid(amount=0, player_id="A1"),
+            Bid(amount=2, player_id="B1"),
+            Bid(amount=0, player_id="A2"),
+            Bid(amount=0, player_id="B2"),
+        ]
+        game_state.active_round.bid.turn = ModIdx(idx=0, mod=4)
+
+        game_state.next_phase()
+
+        assert game_state.phase == Phase.PLAY
+        assert game_state.active_round.bid.highest_bid == Bid(amount=2, player_id="B1")
+        assert game_state.active_round.active_trick.turn == ModIdx(idx=1, mod=4)
+
+    def test_next_phase_forces_dealer_bid_after_all_pass(self, game_state: GameState):
+        game_state.active_round.bid.collection = [
+            Bid(amount=0, player_id="A1"),
+            Bid(amount=0, player_id="B1"),
+            Bid(amount=0, player_id="A2"),
+            Bid(amount=0, player_id="B2"),
+        ]
+        game_state.active_round.bid.turn = ModIdx(idx=0, mod=4)
+
+        game_state.next_phase()
+
+        assert game_state.phase == Phase.PLAY
+        assert game_state.active_round.bid.highest_bid.amount == 0
+        assert game_state.active_round.active_trick.turn == ModIdx(idx=3, mod=4)
 
 
 TEAM_A = 1
