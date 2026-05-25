@@ -19,7 +19,7 @@ import {
   startGame,
 } from "../lib/api";
 import { normalizeBaseUrl } from "../lib/format";
-import type { GameRecord, LobbyState } from "../types/setback";
+import type { GameRecord, GameSummary, LobbyState } from "../types/setback";
 
 const glassPanel = [
   "rounded-3xl backdrop-blur-xl border shadow-xl flex flex-col gap-4",
@@ -52,7 +52,7 @@ export function LobbyScreen() {
   const [joinCode, setJoinCode] = useState("");
   const [createdGame, setCreatedGame] = useState<GameRecord | null>(null);
   const [lobbyState, setLobbyState] = useState<LobbyState | null>(null);
-  const [activeGames, setActiveGames] = useState<GameRecord[]>([]);
+  const [activeGames, setActiveGames] = useState<GameSummary[]>([]);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const {
     toasts,
@@ -279,8 +279,7 @@ export function LobbyScreen() {
                 Start a new table
               </h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-blue-200/65 leading-relaxed">
-                Create a table and share the join code so the other three seats
-                can fill.
+                Create a table and share the join code to start a game.
               </p>
             </div>
             <ActionButton
@@ -305,13 +304,26 @@ export function LobbyScreen() {
               {activeGames.map((game) => (
                 <div
                   key={game.id}
-                  className={`flex items-center justify-between ${glassInner} px-4 py-3`}
+                  className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${glassInner} px-4 py-3`}
                 >
-                  <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                    {game.status === "active"
-                      ? "In Progress"
-                      : "Waiting to Start"}
-                  </span>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                      {game.status === "active"
+                        ? "In Progress"
+                        : "Waiting to Start"}
+                    </span>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-blue-200/60">
+                      Join code{" "}
+                      <span className="font-mono text-slate-600 dark:text-white">
+                        {game.id}
+                      </span>
+                    </p>
+                    <p className="text-sm text-slate-500 dark:text-blue-200/65">
+                      {game.player_count}{" "}
+                      {game.player_count === 1 ? "player" : "players"} at the
+                      table
+                    </p>
+                  </div>
                   <div className="flex gap-2">
                     {currentUser && game.owner === currentUser.sub && (
                       <ActionButton

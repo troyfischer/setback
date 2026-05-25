@@ -24,6 +24,10 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+let resumeSessionPromise:
+  | Promise<{ token: string; user: CurrentUser } | null>
+  | null = null;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [accessToken, setAccessToken] = useState("");
@@ -58,17 +62,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async function resume() {
       const url = normalizeBaseUrl(baseUrl);
       try {
-        const token = await refreshAccessToken(url);
+        resumeSessionPromise ??= (async () => {
+          const token = await refreshAccessToken(url);
+          const user = await fetchMe(url, token.access_token);
+          return { token: token.access_token, user };
+        })();
+
+        const session = await resumeSessionPromise;
         if (cancelled) return;
-        const user = await fetchMe(url, token.access_token);
-        if (cancelled) return;
-        startTransition(() => {
-          setAccessToken(token.access_token);
-          setCurrentUser(user);
-        });
+        if (session) {
+          startTransition(() => {
+            setAccessToken(session.token);
+            setCurrentUser(session.user);
+          });
+        }
       } catch {
         // No valid refresh cookie; fall through to welcome screen.
       } finally {
+        resumeSessionPromise = null;
         if (!cancelled) setHydrated(true);
       }
     }

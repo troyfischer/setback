@@ -16,8 +16,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev",
+    command: "VITE_SETBACK_API_URL=http://localhost npm run dev",
     url: "http://localhost:8081",
-    reuseExistingServer: true,
+    reuseExistingServer: false,
   },
 });

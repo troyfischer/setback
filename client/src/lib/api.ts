@@ -4,6 +4,7 @@ import type {
   CurrentUser,
   GameRecord,
   GameRequest,
+  GameSummary,
   GameStatePlayerScoped,
   LobbyState,
   PlayCardRequest,
@@ -264,7 +265,7 @@ export async function deleteGame(
 }
 
 export async function fetchUserRelevantGames(baseUrl: string, token: string) {
-  return requestJson<GameRecord[]>(`${apiBaseUrl(baseUrl)}/game/games`, {
+  return requestJson<GameSummary[]>(`${apiBaseUrl(baseUrl)}/game/games`, {
     headers: withBearer(token),
     method: "GET",
   });

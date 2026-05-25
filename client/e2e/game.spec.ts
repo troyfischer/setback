@@ -120,6 +120,8 @@ async function playGame(browser: Browser, teams: string[][]) {
     }
 
     // Bid phase
+
+    // First client will bid 2 then all subsequent clients will fail to bid 2 and then bid pass
     const bid2 = player.getByRole("button", { name: /^bid 2$/i });
     if (await bid2.isVisible().catch(() => false)) {
       const [response] = await Promise.all([

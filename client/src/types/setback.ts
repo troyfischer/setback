@@ -29,6 +29,10 @@ export type GameRecord = {
   status: GameStatus;
 };
 
+export type GameSummary = GameRecord & {
+  player_count: number;
+};
+
 export type PlayerRecord = {
   game_id: string;
   id: string;

@@ -6,6 +6,7 @@ from httpx import Response
 
 from src.game.manager import Dealer, GameStatePlayerScoped, Phase
 from src.game.models import (
+    BidAmount,
     BidRequest,
     Game,
     GameRequest,
@@ -117,12 +118,14 @@ def do_bidding(
 ) -> GameStatePlayerScoped:
     starting_turn = game_state.turn
 
-    for _ in range(len(game_state.order.order)):
+    amounts: list[BidAmount] = [0] * len(game_state.order.order)
+    amounts[0] = 2
+    for amount in amounts:
         player_id = game_state.order[game_state.turn].player_id
         res = client.post(
             "/api/game/bid",
             headers={"Authorization": f"Bearer {authenticated_users[player_id]}"},
-            json=BidRequest(game_id=game_state.game_id, amount=2).model_dump(),
+            json=BidRequest(game_id=game_state.game_id, amount=amount).model_dump(),
         )
         assert res.status_code == HTTPStatus.OK, f"Bid failed: {res.text}"
         game_state = GameStatePlayerScoped.model_validate(res.json())

@@ -154,6 +154,47 @@ def test_join_team(teams: list[Team]):
     assert len(teams) == 3
 
 
+def test_get_games_returns_game_summary_for_owner(
+    client: TestClient,
+    authenticated_users: dict[str, str],
+    joined_game: Game,
+):
+    res = client.get(
+        "/api/game/games",
+        headers={"Authorization": f"Bearer {authenticated_users[USERS[0]]}"},
+    )
+
+    assert res.status_code == HTTPStatus.OK
+    summaries = res.json()
+    summary = next(item for item in summaries if item["id"] == joined_game.id)
+    assert summary["owner"] == USERS[0]
+    assert summary["status"] == "created"
+    assert summary["player_count"] == len(USERS)
+
+
+def test_get_games_includes_lobby_player_without_team_membership(
+    client: TestClient,
+    authenticated_users: dict[str, str],
+):
+    game = create_game(client, authenticated_users[USERS[0]])
+    try:
+        join_game(client, authenticated_users, game, USERS[:2])
+
+        res = client.get(
+            "/api/game/games",
+            headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
+        )
+
+        assert res.status_code == HTTPStatus.OK
+        summaries = res.json()
+        summary = next(item for item in summaries if item["id"] == game.id)
+        assert summary["owner"] == USERS[0]
+        assert summary["status"] == "created"
+        assert summary["player_count"] == 2
+    finally:
+        delete_game(client, authenticated_users[USERS[0]], game.id)
+
+
 def test_only_owner_can_start_game(
     client: TestClient,
     authenticated_users: dict[str, str],
@@ -325,7 +366,6 @@ def test_refresh_token_is_rotated_and_old_cookie_is_rejected(
 
 
 def test_refresh_rate_limit_returns_429(
-    client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ):
     class FakeGoogleOAuth:
@@ -354,11 +394,14 @@ def test_refresh_rate_limit_returns_429(
     monkeypatch.setitem(auth_routes._handlers, "google", FakeGoogleOAuth())
     monkeypatch.setattr(rate_limit, "_enforce_limit", fake_enforce_limit)
 
-    callback_res = client.get("/api/auth/google/callback")
-    assert callback_res.status_code == HTTPStatus.OK
+    with TestClient(
+        create_app(prod_settings(database_url=os.environ["DATABASE_URL"]))
+    ) as client:
+        callback_res = client.get("/api/auth/google/callback")
+        assert callback_res.status_code == HTTPStatus.OK
 
-    refresh_res = client.post("/api/auth/refresh")
-    assert refresh_res.status_code == HTTPStatus.TOO_MANY_REQUESTS
+        refresh_res = client.post("/api/auth/refresh")
+        assert refresh_res.status_code == HTTPStatus.TOO_MANY_REQUESTS
 
 
 def test_dev_auth_route_is_registered_in_test_app():

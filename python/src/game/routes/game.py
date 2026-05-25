@@ -22,6 +22,7 @@ from src.game.manager import GameStatePlayerScoped
 from src.game.models import (
     BidRequest,
     Game,
+    GameSummary,
     GameStatus,
     LobbyState,
     PlayCardRequest,
@@ -69,15 +70,31 @@ async def create_game(request: Request, db: DBSession):
 
 @router.get("/games")
 async def get_games(
-    user: Annotated[OAuthUser, Depends(get_current_user)], db: DBSession
+    user: Annotated[OAuthUser, Depends(get_current_user)],
+    db: DBSession,
 ):
-    return db.exec(
+    games = db.exec(
         select(Game)
-        .outerjoin(TeamMember, col(Game.id) == col(TeamMember.game_id))
-        .where((Game.owner == user.sub) | (TeamMember.player_id == user.sub))
+        .outerjoin(Player, col(Game.id) == col(Player.game_id))
+        .where((Game.owner == user.sub) | (Player.id == user.sub))
         .where(Game.status != GameStatus.ENDED)
         .distinct()
     ).all()
+
+    return [
+        GameSummary(
+            id=game.id,
+            created_at=game.created_at,
+            owner=game.owner,
+            status=game.status,
+            player_count=db.exec(
+                select(func.count())
+                .select_from(Player)
+                .where(Player.game_id == game.id)
+            ).one(),
+        )
+        for game in games
+    ]
 
 
 @router.post("/delete")

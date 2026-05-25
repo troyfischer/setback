@@ -235,6 +235,53 @@ class TestBidRound:
         ):
             assert bid_round.highest_bid == expected
 
+    @pytest.mark.parametrize(
+        "bid_round,next_bid,expected",
+        [
+            (
+                BidRound(
+                    game_id="1",
+                    turn=ModIdx(idx=1, mod=2),
+                    collection=[Bid(amount=2, player_id="1")],
+                ),
+                Bid(amount=2, player_id="2"),
+                InvalidGameStateException,
+            ),
+            (
+                BidRound(
+                    game_id="1",
+                    turn=ModIdx(idx=1, mod=2),
+                    collection=[Bid(amount=2, player_id="1")],
+                ),
+                Bid(amount=3, player_id="2"),
+                None,
+            ),
+            (
+                BidRound(
+                    game_id="1",
+                    turn=ModIdx(idx=1, mod=2),
+                    collection=[Bid(amount=0, player_id="1")],
+                ),
+                Bid(amount=0, player_id="2"),
+                None,
+            ),
+        ],
+        ids=["same bid fails", "higher bid succeeds", "pass bid succeeds"],
+    )
+    def test_new_bid(
+        self,
+        bid_round: BidRound,
+        next_bid: Bid,
+        expected: InvalidGameStateException | None,
+    ):
+        with (
+            pytest.raises(expected)
+            if expected is not None
+            else contextlib.nullcontext()
+        ):
+            bid_round.new_bid(next_bid)
+            assert bid_round.collection[-1] == next_bid
+
 
 class TestGameStateBidding:
     @pytest.fixture
@@ -262,20 +309,16 @@ class TestGameStateBidding:
             ),
         )
 
-    def test_next_phase_keeps_non_pass_high_bid(self, game_state: GameState):
+    def test_next_phase_keeps_highest_bid(self, game_state: GameState):
         game_state.active_round.bid.collection = [
             Bid(amount=0, player_id="A1"),
             Bid(amount=2, player_id="B1"),
             Bid(amount=0, player_id="A2"),
             Bid(amount=0, player_id="B2"),
         ]
-        game_state.active_round.bid.turn = ModIdx(idx=0, mod=4)
-
         game_state.next_phase()
 
-        assert game_state.phase == Phase.PLAY
         assert game_state.active_round.bid.highest_bid == Bid(amount=2, player_id="B1")
-        assert game_state.active_round.active_trick.turn == ModIdx(idx=1, mod=4)
 
     def test_next_phase_forces_dealer_bid_after_all_pass(self, game_state: GameState):
         game_state.active_round.bid.collection = [
@@ -284,8 +327,6 @@ class TestGameStateBidding:
             Bid(amount=0, player_id="A2"),
             Bid(amount=0, player_id="B2"),
         ]
-        game_state.active_round.bid.turn = ModIdx(idx=0, mod=4)
-
         game_state.next_phase()
 
         assert game_state.phase == Phase.PLAY

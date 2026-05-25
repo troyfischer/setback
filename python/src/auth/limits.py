@@ -2,6 +2,7 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
+from src.config import AppEnv
 from src.rate_limit import enforce_limit, get_client_ip
 from src.request import RequestContext
 
@@ -28,6 +29,9 @@ async def auth_callback_rate_limit(ctx: RequestContext, request: Request) -> Non
 
 async def auth_refresh_rate_limit(ctx: RequestContext, request: Request) -> None:
     settings = ctx.settings
+    if settings.app_env != AppEnv.PROD:
+        return
+
     enforce_limit(
         ctx.rate_limiter,
         key=f"auth-refresh:ip:{get_client_ip(request)}",
@@ -38,6 +42,9 @@ async def auth_refresh_rate_limit(ctx: RequestContext, request: Request) -> None
 
 async def auth_dev_token_rate_limit(ctx: RequestContext, request: Request) -> None:
     settings = ctx.settings
+    if settings.app_env != AppEnv.PROD:
+        return
+
     enforce_limit(
         ctx.rate_limiter,
         key=f"auth-dev-token:ip:{get_client_ip(request)}",

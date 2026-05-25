@@ -21,6 +21,7 @@ from src.game.exceptions import (
     InvalidTurnException,
 )
 from src.game.models import (
+    BidAmount,
     BidRequest,
     Game,
     Player,
@@ -112,7 +113,7 @@ class Phase(enum.StrEnum):
 
 
 class Bid(BaseModel):
-    amount: Literal[0, 2, 3, 4]
+    amount: BidAmount
     player_id: PlayerId
 
 
@@ -193,6 +194,13 @@ class Trick(TurnBased[PlayedCard]):
 
 
 class BidRound(TurnBased[Bid]):
+    def new_bid(self, bid: Bid) -> None:
+        if self.collection and 0 < bid.amount <= self.highest_bid.amount:
+            raise InvalidGameStateException(
+                "bid must be greater than the current highest bid"
+            )
+        self.collection.append(bid)
+
     @property
     def highest_bid(self) -> Bid:
         if not self.collection:
@@ -455,7 +463,7 @@ class GameState(_GameState):
         self.active_round.start_trick(self.order.get_idx(best_card.player_id))
 
     def process_bid(self, bid: Bid) -> None:
-        self.active_round.bid.append(bid)
+        self.active_round.bid.new_bid(bid)
 
     def process_card(self, card: SetbackCard, player_id: str) -> None:
         self.active_round.ensure_trump(card.suit)

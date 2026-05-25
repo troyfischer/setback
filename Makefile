@@ -4,7 +4,7 @@ dev:
 	@echo "Starting Python backend stack..."
 	@$(MAKE) -C python dev-rebuild
 	@echo "Starting Vite client on http://localhost:8081 ..."
-	@cd client && npm run dev
+	@cd client && VITE_SETBACK_API_URL=http://localhost npm run dev
 
 dev-stop:
 	@echo "Stopping Python backend stack..."

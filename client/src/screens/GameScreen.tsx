@@ -86,6 +86,7 @@ export function GameScreen() {
   });
 
   if (!activeGameId || !currentUser) return <Navigate to="/lobby" replace />;
+  const me = currentUser;
   const gameId = activeGameId;
 
   async function runAction(label: string, action: () => Promise<void>) {
@@ -126,7 +127,7 @@ export function GameScreen() {
   }
 
   function handleLeaveTable() {
-    navigate(activeGameId ? `/lobby/${activeGameId}` : "/lobby");
+    navigate("/lobby");
   }
 
   if (!deferredGameState) {
@@ -165,12 +166,26 @@ export function GameScreen() {
   const trump = gs.active_round.trump;
   const trick = gs.active_round.trick?.collection ?? [];
   const bidHistory = gs.active_round.bid.collection;
+  const winningBid = bidHistory.reduce<
+    { amount: number; player_id: string } | null
+  >((best, bid) => {
+    if (bid.amount === 0) return best;
+    if (!best || bid.amount > best.amount) {
+      return { amount: bid.amount, player_id: bid.player_id };
+    }
+    return best;
+  }, null);
   const scoreEntries = Object.entries(gs.score);
   const isComplete = gs.phase === "complete";
-  const yourTurn = currentPlayer?.player_id === currentUser.sub;
+  const yourTurn = currentPlayer?.player_id === me.sub;
   const canPlay = gs.phase === "play" && yourTurn;
   const dealer = gs.order.order[gs.active_round.dealer.idx];
   const trumpIsRed = trump === "heart" || trump === "diamond";
+  const displayName = me.given_name || me.name || me.sub;
+
+  function playerLabel(playerId: string) {
+    return playerId === me.sub ? displayName : playerId;
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-5 py-8">
@@ -181,7 +196,7 @@ export function GameScreen() {
             Setback
           </h1>
           <p className="text-sm text-slate-500 dark:text-blue-200/70">
-            {formatPhase(gs.phase)}
+            {formatPhase(gs.phase)} · Playing as {displayName}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -302,15 +317,15 @@ export function GameScreen() {
                   Dealer
                 </p>
                 <p className="text-xl font-extrabold text-gray-900 dark:text-white">
-                  {dealer ? dealer.player_id : "—"}
+                  {dealer ? playerLabel(dealer.player_id) : "—"}
                 </p>
               </div>
-              <div className="flex flex-col gap-1 min-w-[130px]">
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-3">
                 <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-blue-200/60">
-                  Up next
-                </p>
-                <p className="text-xl font-extrabold text-gray-900 dark:text-white">
-                  {currentPlayer ? currentPlayer.player_id : "Pending"}
+                  Current turn
                 </p>
                 {yourTurn && (
                   <p className="text-xs font-extrabold uppercase tracking-wide text-red-game">
@@ -318,9 +333,7 @@ export function GameScreen() {
                   </p>
                 )}
               </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2">
               {gs.order.order.map((player) => {
                 const active = player.player_id === currentPlayer?.player_id;
                 return (
@@ -339,7 +352,7 @@ export function GameScreen() {
                         active ? "text-white" : "text-gray-900 dark:text-white",
                       ].join(" ")}
                     >
-                      {player.player_id}
+                      {playerLabel(player.player_id)}
                     </p>
                     <p
                       className={[
@@ -354,43 +367,57 @@ export function GameScreen() {
                   </div>
                 );
               })}
+              </div>
             </div>
           </div>
 
           {/* Bidding */}
-          {gs.phase === "bid" && (
-            <div className={`${glassPanel} p-5`}>
-              <div>
-                <h3 className="text-base font-extrabold text-gray-900 dark:text-white">
-                  Bidding
-                </h3>
-                <p className="mt-0.5 text-sm text-slate-500 dark:text-blue-200/65">
-                  Pass or bid how many points your team will take this round.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2.5">
-                {BID_OPTIONS.map((amount) => (
-                  <ActionButton
-                    key={amount}
-                    busy={busyAction === `Bid ${amount}`}
-                    label={amount === 0 ? "Pass" : `Bid ${amount}`}
-                    onClick={() => {
-                      void handleBid(amount);
-                    }}
-                    tone={amount === 0 ? "ghost" : "secondary"}
+          {(gs.phase === "bid" || bidHistory.length > 0) && (
+            <details className={`${glassPanel} group p-5`} open={gs.phase === "bid"}>
+              <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-base font-extrabold text-gray-900 dark:text-white">
+                    Bidding
+                  </h3>
+                  <p className="mt-0.5 text-sm text-slate-500 dark:text-blue-200/65">
+                    {gs.phase === "bid"
+                      ? "Pass or bid how many points your team will take this round."
+                      : winningBid
+                        ? `${playerLabel(winningBid.player_id)} won the bid with ${winningBid.amount}.`
+                        : "All players passed."}
+                  </p>
+                </div>
+                <span className="pt-0.5 text-lg leading-none text-gray-900 transition-transform group-open:rotate-180 dark:text-white">
+                  ˅
+                </span>
+              </summary>
+              <div className="mt-4 flex flex-col gap-4">
+                {gs.phase === "bid" && (
+                  <div className="flex flex-wrap gap-2.5">
+                    {BID_OPTIONS.map((amount) => (
+                      <ActionButton
+                        key={amount}
+                        busy={busyAction === `Bid ${amount}`}
+                        label={amount === 0 ? "Pass" : `Bid ${amount}`}
+                        onClick={() => {
+                          void handleBid(amount);
+                        }}
+                        tone={amount === 0 ? "ghost" : "secondary"}
+                      />
+                    ))}
+                  </div>
+                )}
+                {bidHistory.length > 0 && (
+                  <RoundActivityTable
+                    rows={bidHistory.map((b) => ({
+                      player: playerLabel(b.player_id),
+                      action: b.amount === 0 ? "Pass" : "Bid",
+                      detail: b.amount === 0 ? "—" : String(b.amount),
+                    }))}
                   />
-                ))}
+                )}
               </div>
-              {bidHistory.length > 0 && (
-                <RoundActivityTable
-                  rows={bidHistory.map((b) => ({
-                    player: b.player_id,
-                    action: b.amount === 0 ? "Pass" : "Bid",
-                    detail: b.amount === 0 ? "—" : String(b.amount),
-                  }))}
-                />
-              )}
-            </div>
+            </details>
           )}
 
           {/* Current trick */}
@@ -401,7 +428,7 @@ export function GameScreen() {
               </h3>
               <RoundActivityTable
                 rows={trick.map((c) => ({
-                  player: c.player_id,
+                  player: playerLabel(c.player_id),
                   action: "Played",
                   detail: formatCard(c),
                 }))}
@@ -421,7 +448,7 @@ export function GameScreen() {
                     ? "Review your cards, then pass or bid."
                     : canPlay
                       ? "Click a card to play it."
-                      : `Waiting on ${currentPlayer?.player_id ?? "the next player"}.`}
+                      : `Waiting on ${currentPlayer ? playerLabel(currentPlayer.player_id) : "the next player"}.`}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2.5">

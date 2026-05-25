@@ -36,6 +36,14 @@ class Game(SQLModel, table=True):
     status: GameStatus = SqlField(default=GameStatus.CREATED)
 
 
+class GameSummary(BaseModel):
+    created_at: datetime.datetime
+    id: str
+    owner: str
+    player_count: int
+    status: GameStatus
+
+
 class Player(SQLModel, table=True):
     id: str = SqlField(foreign_key="oauthuser.sub", primary_key=True)
     game_id: str = SqlField(
@@ -96,7 +104,7 @@ class GameRequest(BaseModel):
 
 
 class BidRequest(GameRequest):
-    amount: Literal[0, 2, 3, 4]
+    amount: BidAmount
 
 
 class PlayCardRequest(GameRequest):
@@ -278,9 +286,10 @@ class SetbackDeck(Deck[SetbackCard]):
         return SetbackDeck(cards=[])
 
 
-class Bid(BaseModel):
-    amount: int = PydField(ge=1, le=4)
-
-
 class Dealer(BaseModel):
     user: str
+
+
+# Types
+
+type BidAmount = Literal[0, 2, 3, 4]

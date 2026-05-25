@@ -16,6 +16,7 @@ from tests.helpers import (
     create_and_join_teams,
     create_authenticated_users,
     create_game,
+    delete_game,
     do_bidding,
     join_game,
     play_full_game,
@@ -136,15 +137,57 @@ def test_create_game(game: Game):
 
 @pytest.fixture(scope="module")
 def joined_game(
-    client: httpx.Client, authenticated_users: dict[str, str], game: Game
+    client: httpx.Client,
+    authenticated_users: dict[str, str],
+    game: Game,
 ) -> Game:
     join_game(client, authenticated_users, game, USERS)
-    print(f"\n✓ {len(USERS)} players joined game")
     return game
 
 
 def test_join_game(joined_game: Game):
     assert joined_game is not None
+
+
+def test_get_games_returns_game_summary_for_owner(
+    client: httpx.Client,
+    authenticated_users: dict[str, str],
+    joined_game: Game,
+):
+    res = client.get(
+        "/api/game/games",
+        headers={"Authorization": f"Bearer {authenticated_users[USERS[0]]}"},
+    )
+
+    assert res.status_code == HTTPStatus.OK
+    summaries = res.json()
+    summary = next(item for item in summaries if item["id"] == joined_game.id)
+    assert summary["owner"] == USERS[0]
+    assert summary["status"] == "created"
+    assert summary["player_count"] == len(USERS)
+
+
+def test_get_games_includes_lobby_player_without_team_membership(
+    client: httpx.Client,
+    authenticated_users: dict[str, str],
+):
+    fresh_game = create_game(client, authenticated_users[USERS[0]])
+    try:
+        join_game(client, authenticated_users, fresh_game, USERS[:2])
+
+        res = client.get(
+            "/api/game/games",
+            headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
+        )
+
+        assert res.status_code == HTTPStatus.OK
+        summaries = res.json()
+        summary = next(item for item in summaries if item["id"] == fresh_game.id)
+        assert summary["owner"] == USERS[0]
+        assert summary["status"] == "created"
+        assert summary["player_count"] == 2
+    finally:
+        delete_game(client, authenticated_users[USERS[0]], fresh_game.id)
 
 
 @pytest.fixture(scope="module")
