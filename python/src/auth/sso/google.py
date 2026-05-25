@@ -4,12 +4,12 @@ from pydantic_settings import BaseSettings
 from starlette.requests import Request
 
 from src.auth.models import Credentials
+from src.config import Settings
 from src.auth.sso.base import OAuthProvider, oauth
 from src.auth.sso.models import OAuthUser
 
 
 class GoogleOIDCSettings(BaseSettings):
-    base_url: str = "http://localhost"
     google_client_id: str | None = None
     google_client_secret: str | None = None
 
@@ -26,6 +26,7 @@ class GoogleOIDCSettings(BaseSettings):
 @final
 class GoogleOIDC(OAuthProvider):
     def __init__(self) -> None:
+        self.app_settings = Settings()
         self.settings = GoogleOIDCSettings()
         creds = self.settings.credentials
 
@@ -40,7 +41,7 @@ class GoogleOIDC(OAuthProvider):
     @property
     @override
     def redirect_uri(self) -> str:
-        return f"{self.settings.base_url}/api/auth/google/callback"
+        return f"{self.app_settings.base_url}/api/auth/google/callback"
 
     @property
     @override
