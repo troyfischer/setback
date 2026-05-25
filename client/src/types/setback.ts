@@ -51,6 +51,7 @@ export type LobbyState = {
   game_owner: string;
   teams: TeamWithMembers[];
   players: string[];
+  player_names: Record<string, string>;
   game_status: GameStatus;
 };
 

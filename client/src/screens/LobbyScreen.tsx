@@ -70,6 +70,10 @@ export function LobbyScreen() {
     currentUser?.sub ||
     "player";
 
+  function playerLabel(playerId: string) {
+    return lobbyState?.player_names[playerId] || playerId;
+  }
+
   const refreshLobby = useCallback(async () => {
     if (!accessToken || !activeGameId) return;
     try {
@@ -406,7 +410,7 @@ export function LobbyScreen() {
                     >
                       <div className="inline-flex max-w-full min-w-0 items-center justify-center rounded-full bg-blue-300 px-3 py-1.5 text-xs font-extrabold text-blue-950 dark:bg-blue-700 dark:text-blue-100">
                         <span className="truncate font-semibold text-gray-900 dark:text-white">
-                          {player}
+                          {playerLabel(player)}
                         </span>
                       </div>
                     </div>
@@ -518,10 +522,10 @@ export function LobbyScreen() {
                               className="flex items-center gap-3 px-4 py-2.5"
                             >
                               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-navy-100/80 dark:bg-navy-600/50 text-sm font-extrabold text-navy-800 dark:text-blue-100">
-                                {member[0]!.toUpperCase()}
+                                {playerLabel(member)[0]!.toUpperCase()}
                               </div>
                               <span className="truncate text-sm font-semibold text-gray-900 dark:text-white">
-                                {member}
+                                {playerLabel(member)}
                               </span>
                             </div>
                           ) : (

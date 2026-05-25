@@ -126,6 +126,7 @@ class LobbyState(BaseModel):
     game_status: GameStatus
     teams: list[TeamWithMembers]
     players: list[str]
+    player_names: dict[str, str]
 
 
 # Card Models

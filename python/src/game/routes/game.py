@@ -317,6 +317,11 @@ def get_lobby_state(
         select(TeamMember).where(TeamMember.game_id == game_id)
     ).all()
     players = db.exec(select(Player).where(Player.game_id == game_id)).all()
+    player_ids = [p.id for p in players]
+    oauth_users = db.exec(select(OAuthUser).where(col(OAuthUser.sub).in_(player_ids))).all()
+    player_names = {
+        user.sub: user.given_name or user.name or user.sub for user in oauth_users
+    }
 
     members_by_team: dict[int, list[str]] = {}
     for m in team_members:
@@ -334,7 +339,8 @@ def get_lobby_state(
             )
             for t in teams
         ],
-        players=[p.id for p in players],
+        players=player_ids,
+        player_names=player_names,
         game_status=game.status,
     )
 
