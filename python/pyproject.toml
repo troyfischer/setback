@@ -1,6 +1,10 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "src"
+module-root = ""
 
 [project]
 name = "setback"
@@ -12,7 +16,6 @@ authors = [
 readme = "README.md"
 license = {file = "LICENSE"}
 requires-python = ">=3.12"
-keywords = ["your", "keywords"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",
@@ -38,27 +41,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=7.0.0",
-    "pytest-env>=1.1.5",
-    "pytest-cov>=4.0.0",
-    "ruff>=0.1.0",
-    "mypy>=1.0.0",
-    "testcontainers[postgres,redis]>=4.13.3",
-]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/your-app-name"
-Repository = "https://github.com/yourusername/your-app-name"
-
-[project.scripts]
-your-app = "your_app.main:app"
-
-[tool.hatch.version]
-path = "src/your_app/__init__.py"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/your_app"]
+Homepage = "https://github.com/troyfischer/setback"
+Repository = "https://github.com/troyfischer/setback"
 
 [tool.ruff]
 line-length = 88
@@ -78,8 +64,12 @@ venv = ".venv"
 
 [dependency-groups]
 dev = [
-    "fakeredis>=2.32.1",
+    "pytest>=7.0.0",
     "pytest-env>=1.1.5",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "fakeredis>=2.32.1",
+    "testcontainers[postgres,redis]>=4.14.2",
     "pulumi-digitalocean>=4.37.1",
-    "testcontainers>=4.14.2",
 ]

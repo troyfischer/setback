@@ -15,7 +15,7 @@ DEV_ENV = \
 COMPOSE = $(DEV_ENV) docker compose
 
 init:
-	uv sync --all-extras
+	uv sync --all-groups
 
 db-upgrade:
 	uv run alembic upgrade head

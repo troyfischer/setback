@@ -1237,22 +1237,16 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
+    { name = "fakeredis" },
     { name = "mypy" },
+    { name = "pulumi-digitalocean" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-env" },
     { name = "ruff" },
     { name = "testcontainers", extra = ["redis"] },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "fakeredis" },
-    { name = "pulumi-digitalocean" },
-    { name = "pytest-env" },
-    { name = "testcontainers" },
 ]
 
 [package.metadata]
@@ -1262,31 +1256,28 @@ requires-dist = [
     { name = "fastapi" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "itsdangerous", specifier = ">=2.2.0" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "passlib", extras = ["argon2"], specifier = ">=1.7.4" },
     { name = "psycopg2-binary", specifier = ">=2.9.11" },
     { name = "pydantic-settings", specifier = ">=2.12.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },
-    { name = "pytest-env", marker = "extra == 'dev'", specifier = ">=1.1.5" },
     { name = "python-jose", extras = ["cryptography"] },
     { name = "python-multipart" },
     { name = "redis", specifier = ">=6.4.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
     { name = "sqlmodel", specifier = ">=0.0.25" },
     { name = "structlog", specifier = ">=25.5.0" },
-    { name = "testcontainers", extras = ["postgres", "redis"], marker = "extra == 'dev'", specifier = ">=4.13.3" },
     { name = "types-authlib", specifier = ">=1.6.5.20251005" },
     { name = "uvicorn", extras = ["standard"] },
 ]
-provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "fakeredis", specifier = ">=2.32.1" },
+    { name = "mypy", specifier = ">=1.0.0" },
     { name = "pulumi-digitalocean", specifier = ">=4.37.1" },
+    { name = "pytest", specifier = ">=7.0.0" },
+    { name = "pytest-cov", specifier = ">=4.0.0" },
     { name = "pytest-env", specifier = ">=1.1.5" },
-    { name = "testcontainers", specifier = ">=4.14.2" },
+    { name = "ruff", specifier = ">=0.1.0" },
+    { name = "testcontainers", extras = ["postgres", "redis"], specifier = ">=4.14.2" },
 ]
 
 [[package]]
