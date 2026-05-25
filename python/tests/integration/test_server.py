@@ -81,7 +81,7 @@ def docker_compose(base_url: str):
     log.info("waiting for services to be healthy...")
     while time.time() - start_time < timeout:
         try:
-            response = httpx.get(f"{base_url}/health", timeout=3.0)
+            response = httpx.get(f"{base_url}/api/health", timeout=3.0)
             if response.status_code == 200:
                 log.info("services are ready")
                 break
@@ -113,7 +113,7 @@ def authenticated_users(client: httpx.Client) -> dict[str, str]:
 
 
 def test_health_check(client: httpx.Client):
-    response = client.get("/health")
+    response = client.get("/api/health")
     assert response.status_code == HTTPStatus.OK
 
 

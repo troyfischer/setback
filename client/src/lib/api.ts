@@ -14,6 +14,12 @@ import type {
   UpdateTeamRequest,
 } from "../types/setback";
 
+const API_PREFIX = "/api";
+
+export function apiBaseUrl(baseUrl: string) {
+  return `${baseUrl}${API_PREFIX}`;
+}
+
 async function readError(response: Response) {
   try {
     const parsed = (await response.json()) as { detail?: string } | string;
@@ -45,7 +51,7 @@ function withBearer(token: string) {
 }
 
 export async function fetchAuthOptions(baseUrl: string) {
-  return requestJson<AuthOptions>(`${baseUrl}/auth/options`, {
+  return requestJson<AuthOptions>(`${apiBaseUrl(baseUrl)}/auth/options`, {
     method: "GET",
   });
 }
@@ -55,7 +61,7 @@ export async function createDevToken(baseUrl: string, username: string) {
   form.set("username", username);
   form.set("password", "dev-password");
 
-  return requestJson<TokenResponse>(`${baseUrl}/auth/dev-token`, {
+  return requestJson<TokenResponse>(`${apiBaseUrl(baseUrl)}/auth/dev-token`, {
     body: form.toString(),
     credentials: "include",
     headers: {
@@ -66,21 +72,21 @@ export async function createDevToken(baseUrl: string, username: string) {
 }
 
 export async function refreshAccessToken(baseUrl: string) {
-  return requestJson<TokenResponse>(`${baseUrl}/auth/refresh`, {
+  return requestJson<TokenResponse>(`${apiBaseUrl(baseUrl)}/auth/refresh`, {
     credentials: "include",
     method: "POST",
   });
 }
 
 export async function fetchMe(baseUrl: string, token: string) {
-  return requestJson<CurrentUser>(`${baseUrl}/auth/me`, {
+  return requestJson<CurrentUser>(`${apiBaseUrl(baseUrl)}/auth/me`, {
     headers: withBearer(token),
     method: "GET",
   });
 }
 
 export async function logout(baseUrl: string, token: string) {
-  const response = await fetch(`${baseUrl}/auth/logout`, {
+  const response = await fetch(`${apiBaseUrl(baseUrl)}/auth/logout`, {
     credentials: "include",
     headers: withBearer(token),
     method: "POST",
@@ -94,7 +100,7 @@ export async function logout(baseUrl: string, token: string) {
 }
 
 export async function createGame(baseUrl: string, token: string) {
-  return requestJson<GameRecord>(`${baseUrl}/game/create`, {
+  return requestJson<GameRecord>(`${apiBaseUrl(baseUrl)}/game/create`, {
     headers: withBearer(token),
     method: "POST",
   });
@@ -105,7 +111,7 @@ export async function joinGame(
   token: string,
   request: GameRequest,
 ) {
-  return requestJson(`${baseUrl}/game/join`, {
+  return requestJson(`${apiBaseUrl(baseUrl)}/game/join`, {
     body: JSON.stringify(request),
     headers: {
       ...withBearer(token),
@@ -120,7 +126,7 @@ export async function createTeam(
   token: string,
   request: GameRequest,
 ) {
-  return requestJson<TeamRecord>(`${baseUrl}/team/create`, {
+  return requestJson<TeamRecord>(`${apiBaseUrl(baseUrl)}/team/create`, {
     body: JSON.stringify(request),
     headers: {
       ...withBearer(token),
@@ -135,7 +141,7 @@ export async function joinTeam(
   token: string,
   request: UpdateTeamRequest,
 ) {
-  return requestJson<TeamMemberRecord>(`${baseUrl}/team/join`, {
+  return requestJson<TeamMemberRecord>(`${apiBaseUrl(baseUrl)}/team/join`, {
     body: JSON.stringify(request),
     headers: {
       ...withBearer(token),
@@ -150,7 +156,7 @@ export async function leaveTeam(
   token: string,
   request: UpdateTeamRequest,
 ) {
-  return requestJson<TeamMemberRecord>(`${baseUrl}/team/leave`, {
+  return requestJson<TeamMemberRecord>(`${apiBaseUrl(baseUrl)}/team/leave`, {
     body: JSON.stringify(request),
     headers: {
       ...withBearer(token),
@@ -165,7 +171,7 @@ export async function deleteTeam(
   token: string,
   request: UpdateTeamRequest,
 ) {
-  return requestJson(`${baseUrl}/team/delete`, {
+  return requestJson(`${apiBaseUrl(baseUrl)}/team/delete`, {
     body: JSON.stringify(request),
     headers: {
       ...withBearer(token),
@@ -180,7 +186,7 @@ export async function fetchLobbyState(
   token: string,
   gameId: string,
 ) {
-  return requestJson<LobbyState>(`${baseUrl}/game/${gameId}/lobby`, {
+  return requestJson<LobbyState>(`${apiBaseUrl(baseUrl)}/game/${gameId}/lobby`, {
     headers: withBearer(token),
     method: "GET",
   });
@@ -191,7 +197,7 @@ export async function startGame(
   token: string,
   request: GameRequest,
 ) {
-  return requestJson<GameStatePlayerScoped>(`${baseUrl}/game/start`, {
+  return requestJson<GameStatePlayerScoped>(`${apiBaseUrl(baseUrl)}/game/start`, {
     body: JSON.stringify(request),
     headers: {
       ...withBearer(token),
@@ -206,7 +212,7 @@ export async function bidGame(
   token: string,
   request: BidRequest,
 ) {
-  return requestJson<GameStatePlayerScoped>(`${baseUrl}/game/bid`, {
+  return requestJson<GameStatePlayerScoped>(`${apiBaseUrl(baseUrl)}/game/bid`, {
     body: JSON.stringify(request),
     headers: {
       ...withBearer(token),
@@ -221,7 +227,7 @@ export async function playCard(
   token: string,
   request: PlayCardRequest,
 ) {
-  return requestJson<GameStatePlayerScoped>(`${baseUrl}/game/trick/play`, {
+  return requestJson<GameStatePlayerScoped>(`${apiBaseUrl(baseUrl)}/game/trick/play`, {
     body: JSON.stringify(request),
     headers: {
       ...withBearer(token),
@@ -236,7 +242,7 @@ export async function fetchGameState(
   token: string,
   gameId: string,
 ) {
-  return requestJson<GameStatePlayerScoped>(`${baseUrl}/game/${gameId}/state`, {
+  return requestJson<GameStatePlayerScoped>(`${apiBaseUrl(baseUrl)}/game/${gameId}/state`, {
     headers: withBearer(token),
     method: "GET",
   });
@@ -247,7 +253,7 @@ export async function deleteGame(
   token: string,
   request: GameRequest,
 ) {
-  return requestJson<GameRecord>(`${baseUrl}/game/delete`, {
+  return requestJson<GameRecord>(`${apiBaseUrl(baseUrl)}/game/delete`, {
     body: JSON.stringify(request),
     headers: {
       ...withBearer(token),
@@ -258,7 +264,7 @@ export async function deleteGame(
 }
 
 export async function fetchUserRelevantGames(baseUrl: string, token: string) {
-  return requestJson<GameRecord[]>(`${baseUrl}/game/games`, {
+  return requestJson<GameRecord[]>(`${apiBaseUrl(baseUrl)}/game/games`, {
     headers: withBearer(token),
     method: "GET",
   });
@@ -270,7 +276,7 @@ export async function createSubscribeToken(
   gameId: string,
 ) {
   return requestJson<SubscribeTokenResponse>(
-    `${baseUrl}/game/${gameId}/subscribe-token`,
+    `${apiBaseUrl(baseUrl)}/game/${gameId}/subscribe-token`,
     {
       headers: withBearer(token),
       method: "POST",

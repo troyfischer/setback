@@ -1,3 +1,4 @@
+import { apiBaseUrl } from "./api";
 import type { TokenResponse } from "../types/setback";
 
 const POPUP_WIDTH = 520;
@@ -23,7 +24,7 @@ export async function loginWithGoogle(baseUrl: string): Promise<TokenResponse> {
     window.screenY + (window.outerHeight - POPUP_HEIGHT) / 2,
   );
   const popup = window.open(
-    `${baseUrl}/auth/google/login`,
+    `${apiBaseUrl(baseUrl)}/auth/google/login`,
     "setback-google-login",
     `popup=yes,width=${POPUP_WIDTH},height=${POPUP_HEIGHT},left=${left},top=${top}`,
   );

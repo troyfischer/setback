@@ -161,7 +161,7 @@ def test_only_owner_can_start_game(
     teams: list[Team],
 ):
     res = client.post(
-        "/game/start",
+        "/api/game/start",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
         json={"game_id": game.id},
     )
@@ -233,12 +233,12 @@ def test_play_full_game(
 
 
 def test_oauth_unknown_provider_returns_404(client: TestClient):
-    res = client.get("/auth/not-a-provider/login")
+    res = client.get("/api/auth/not-a-provider/login")
     assert res.status_code == HTTPStatus.NOT_FOUND
 
 
 def test_auth_options_exposes_enabled_login_methods(client: TestClient):
-    res = client.get("/auth/options")
+    res = client.get("/api/auth/options")
     assert res.status_code == HTTPStatus.OK
     assert res.json() == {
         "dev_auth_enabled": True,
@@ -271,12 +271,12 @@ def test_oauth_callback_sets_refresh_cookie_and_refresh_succeeds(
 
     monkeypatch.setitem(auth_routes._handlers, "google", FakeGoogleOAuth())
 
-    callback_res = client.get("/auth/google/callback")
+    callback_res = client.get("/api/auth/google/callback")
     assert callback_res.status_code == HTTPStatus.OK
     assert "refresh_token=" in callback_res.headers.get("set-cookie", "")
     assert "Secure" not in callback_res.headers.get("set-cookie", "")
 
-    refresh_res = client.post("/auth/refresh")
+    refresh_res = client.post("/api/auth/refresh")
     assert refresh_res.status_code == HTTPStatus.OK
     assert refresh_res.json()["access_token"]
     assert "refresh_token=" in refresh_res.headers.get("set-cookie", "")
@@ -307,7 +307,7 @@ def test_refresh_token_is_rotated_and_old_cookie_is_rejected(
 
     monkeypatch.setitem(auth_routes._handlers, "google", FakeGoogleOAuth())
 
-    callback_res = client.get("/auth/google/callback")
+    callback_res = client.get("/api/auth/google/callback")
     assert callback_res.status_code == HTTPStatus.OK
 
     set_cookie = callback_res.headers.get("set-cookie", "")
@@ -315,12 +315,12 @@ def test_refresh_token_is_rotated_and_old_cookie_is_rejected(
     assert match is not None
     original_refresh = match.group(1)
 
-    refresh_res = client.post("/auth/refresh")
+    refresh_res = client.post("/api/auth/refresh")
     assert refresh_res.status_code == HTTPStatus.OK
 
     with TestClient(create_app()) as stale_client:
         stale_client.cookies.set("refresh_token", original_refresh)
-        stale_refresh_res = stale_client.post("/auth/refresh")
+        stale_refresh_res = stale_client.post("/api/auth/refresh")
     assert stale_refresh_res.status_code == HTTPStatus.UNAUTHORIZED
 
 
@@ -354,16 +354,16 @@ def test_refresh_rate_limit_returns_429(
     monkeypatch.setitem(auth_routes._handlers, "google", FakeGoogleOAuth())
     monkeypatch.setattr(rate_limit, "_enforce_limit", fake_enforce_limit)
 
-    callback_res = client.get("/auth/google/callback")
+    callback_res = client.get("/api/auth/google/callback")
     assert callback_res.status_code == HTTPStatus.OK
 
-    refresh_res = client.post("/auth/refresh")
+    refresh_res = client.post("/api/auth/refresh")
     assert refresh_res.status_code == HTTPStatus.TOO_MANY_REQUESTS
 
 
 def test_dev_auth_route_is_registered_in_test_app():
     routes = {route.path for route in create_app().routes}
-    assert "/auth/dev-token" in routes
+    assert "/api/auth/dev-token" in routes
 
 
 def test_create_app_rejects_dev_auth_in_prod():
@@ -435,7 +435,7 @@ def test_lifespan_skips_create_schema_in_prod(
 
 
 def test_subscribe_requires_auth(client: TestClient, game: Game):
-    res = client.get(f"/game/{game.id}/subscribe")
+    res = client.get(f"/api/game/{game.id}/subscribe")
     assert res.status_code == HTTPStatus.UNAUTHORIZED
 
 
@@ -444,7 +444,7 @@ def test_subscribe_unknown_game_returns_404(
     authenticated_users: dict[str, str],
 ):
     token = client.post(
-        "/game/999999/subscribe-token",
+        "/api/game/999999/subscribe-token",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[0]]}"},
     )
     assert token.status_code == HTTPStatus.NOT_FOUND
@@ -456,7 +456,7 @@ def test_subscribe_token_requires_game_membership(
     game: Game,
 ):
     res = client.post(
-        f"/game/{game.id}/subscribe-token",
+        f"/api/game/{game.id}/subscribe-token",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
     )
     assert res.status_code == HTTPStatus.FORBIDDEN
@@ -475,7 +475,7 @@ def test_join_game_rate_limit_returns_429(
     monkeypatch.setattr(rate_limit, "_enforce_limit", fake_enforce_limit)
 
     res = client.post(
-        "/game/join",
+        "/api/game/join",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
         json=GameRequest(game_id=game.id).model_dump(),
     )
@@ -490,21 +490,21 @@ def test_join_team_rejects_membership_in_multiple_teams(
     join_game(client, authenticated_users, game, [USERS[1], USERS[2]])
 
     team_a_res = client.post(
-        "/team/create",
+        "/api/team/create",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[0]]}"},
         json=GameRequest(game_id=game.id).model_dump(),
     )
     team_a = Team.model_validate(team_a_res.json())
 
     team_b_res = client.post(
-        "/team/create",
+        "/api/team/create",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
         json=GameRequest(game_id=game.id).model_dump(),
     )
     team_b = Team.model_validate(team_b_res.json())
 
     first_join = client.post(
-        "/team/join",
+        "/api/team/join",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[2]]}"},
         json=UpdateTeamRequest(
             game_id=game.id, team_number=team_a.team_number
@@ -513,7 +513,7 @@ def test_join_team_rejects_membership_in_multiple_teams(
     assert first_join.status_code == HTTPStatus.OK
 
     second_join = client.post(
-        "/team/join",
+        "/api/team/join",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[2]]}"},
         json=UpdateTeamRequest(
             game_id=game.id, team_number=team_b.team_number
@@ -530,14 +530,14 @@ def test_create_team_rejects_player_already_on_team(
     join_game(client, authenticated_users, game, [USERS[1]])
 
     team_owner_res = client.post(
-        "/team/create",
+        "/api/team/create",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[0]]}"},
         json=GameRequest(game_id=game.id).model_dump(),
     )
     team_owner = Team.model_validate(team_owner_res.json())
 
     join_res = client.post(
-        "/team/join",
+        "/api/team/join",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
         json=UpdateTeamRequest(
             game_id=game.id, team_number=team_owner.team_number
@@ -546,7 +546,7 @@ def test_create_team_rejects_player_already_on_team(
     assert join_res.status_code == HTTPStatus.OK
 
     create_second_team_res = client.post(
-        "/team/create",
+        "/api/team/create",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
         json=GameRequest(game_id=game.id).model_dump(),
     )
@@ -567,13 +567,13 @@ def test_subscribe_token_and_stream_connect(
     monkeypatch.setattr(game_routes, "sse_event_stream", finite_stream)
 
     token_res = client.post(
-        f"/game/{game.id}/subscribe-token",
+        f"/api/game/{game.id}/subscribe-token",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[0]]}"},
     )
     assert token_res.status_code == HTTPStatus.OK
 
     sse_token = token_res.json()["sse_token"]
-    stream_res = client.get(f"/game/{game.id}/subscribe?sse_token={sse_token}")
+    stream_res = client.get(f"/api/game/{game.id}/subscribe?sse_token={sse_token}")
     assert stream_res.status_code == HTTPStatus.OK
     assert stream_res.headers["content-type"].startswith("text/event-stream")
 
@@ -588,13 +588,13 @@ def test_subscribe_rejects_token_for_different_game(
     join_game(client, authenticated_users, game2, [USERS[0]])
 
     token_res = client.post(
-        f"/game/{game1.id}/subscribe-token",
+        f"/api/game/{game1.id}/subscribe-token",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[0]]}"},
     )
     assert token_res.status_code == HTTPStatus.OK
 
     sse_token = token_res.json()["sse_token"]
-    stream_res = client.get(f"/game/{game2.id}/subscribe?sse_token={sse_token}")
+    stream_res = client.get(f"/api/game/{game2.id}/subscribe?sse_token={sse_token}")
     assert stream_res.status_code == HTTPStatus.UNAUTHORIZED
 
 
@@ -689,7 +689,7 @@ def test_sse_connection_manager_rejects_new_player_at_game_limit():
 
 def _start_game_request(client, token, game_id):
     return client.post(
-        "/game/start",
+        "/api/game/start",
         headers={"Authorization": f"Bearer {token}"},
         json=GameRequest(game_id=game_id).model_dump(),
     )
@@ -710,7 +710,7 @@ def test_cannot_start_game_with_one_team(
     game: Game,
 ):
     client.post(
-        "/team/create",
+        "/api/team/create",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[0]]}"},
         json=GameRequest(game_id=game.id).model_dump(),
     )
@@ -727,13 +727,13 @@ def test_cannot_start_game_with_empty_team(
 
     # user0 creates team A and then leaves it, leaving it empty
     team_res = client.post(
-        "/team/create",
+        "/api/team/create",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[0]]}"},
         json=GameRequest(game_id=game.id).model_dump(),
     )
     team_a = Team.model_validate(team_res.json())
     client.post(
-        "/team/leave",
+        "/api/team/leave",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[0]]}"},
         json=UpdateTeamRequest(
             game_id=game.id, team_number=team_a.team_number
@@ -742,7 +742,7 @@ def test_cannot_start_game_with_empty_team(
 
     # user1 creates team B (auto-joins)
     client.post(
-        "/team/create",
+        "/api/team/create",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
         json=GameRequest(game_id=game.id).model_dump(),
     )
@@ -760,7 +760,7 @@ def test_cannot_start_game_with_unequal_teams(
 
     # user0 creates team A (auto-joins: A=[user0])
     team_res = client.post(
-        "/team/create",
+        "/api/team/create",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[0]]}"},
         json=GameRequest(game_id=game.id).model_dump(),
     )
@@ -768,14 +768,14 @@ def test_cannot_start_game_with_unequal_teams(
 
     # user1 creates team B (auto-joins: B=[user1])
     client.post(
-        "/team/create",
+        "/api/team/create",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
         json=GameRequest(game_id=game.id).model_dump(),
     )
 
     # user2 joins team A → A=[user0, user2], B=[user1] (unequal)
     client.post(
-        "/team/join",
+        "/api/team/join",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[2]]}"},
         json=UpdateTeamRequest(
             game_id=game.id, team_number=team_a.team_number
@@ -795,13 +795,13 @@ def test_cannot_start_game_with_fewer_than_four_players(
 
     # user0 creates team A (auto-joins: A=[user0])
     client.post(
-        "/team/create",
+        "/api/team/create",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[0]]}"},
         json=GameRequest(game_id=game.id).model_dump(),
     )
     # user1 creates team B (auto-joins: B=[user1]) → 2 teams of 1 = 2 players total
     client.post(
-        "/team/create",
+        "/api/team/create",
         headers={"Authorization": f"Bearer {authenticated_users[USERS[1]]}"},
         json=GameRequest(game_id=game.id).model_dump(),
     )

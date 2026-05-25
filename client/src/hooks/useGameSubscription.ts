@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { createSubscribeToken } from "../lib/api";
+import { apiBaseUrl, createSubscribeToken } from "../lib/api";
 import { normalizeBaseUrl } from "../lib/format";
 import type { GameEvent } from "../types/setback";
 
@@ -94,7 +94,7 @@ export function useGameSubscription({
         );
         if (cancelled) return;
 
-        const streamUrl = `${normalizedBaseUrl}/game/${gameId}/subscribe?sse_token=${encodeURIComponent(token.sse_token)}`;
+        const streamUrl = `${apiBaseUrl(normalizedBaseUrl)}/game/${gameId}/subscribe?sse_token=${encodeURIComponent(token.sse_token)}`;
         const es = new EventSource(streamUrl);
         source = es;
 

@@ -65,7 +65,7 @@ AUTO_CREATE_SCHEMA=false
 
 Add authorized redirect URI in Google Cloud Console:
 ```
-https://setback.troyfischer.net/auth/google/callback
+https://setback.troyfischer.net/api/auth/google/callback
 ```
 
 ### 7. Deploy Application

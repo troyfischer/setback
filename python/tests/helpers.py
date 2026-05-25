@@ -24,7 +24,7 @@ def create_authenticated_users(client: HTTPClient, users: list[str]) -> dict[str
     tokens = {}
     for user in users:
         res = client.post(
-            "/auth/dev-token",
+            "/api/auth/dev-token",
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             data={"username": user, "password": "testpassword"},
         )
@@ -35,7 +35,7 @@ def create_authenticated_users(client: HTTPClient, users: list[str]) -> dict[str
 
 def delete_game(client: HTTPClient, auth_token: str, game_id: int) -> None:
     client.post(
-        "/game/delete",
+        "/api/game/delete",
         headers={"Authorization": f"Bearer {auth_token}"},
         json={"game_id": game_id},
     )
@@ -43,7 +43,7 @@ def delete_game(client: HTTPClient, auth_token: str, game_id: int) -> None:
 
 def create_game(client: HTTPClient, auth_token: str) -> Game:
     res = client.post(
-        "/game/create",
+        "/api/game/create",
         headers={"Authorization": f"Bearer {auth_token}"},
     )
     assert res.status_code == HTTPStatus.OK, f"Failed to create game: {res.text}"
@@ -58,7 +58,7 @@ def join_game(
 ) -> None:
     for user in users:
         res = client.post(
-            "/game/join",
+            "/api/game/join",
             headers={"Authorization": f"Bearer {authenticated_users[user]}"},
             json=GameRequest(game_id=game.id).model_dump(),
         )
@@ -77,7 +77,7 @@ def create_and_join_teams(
 
     for owner, _ in itertools.batched(users, 2):
         res = client.post(
-            "/team/create",
+            "/api/team/create",
             headers={"Authorization": f"Bearer {authenticated_users[owner]}"},
             json=GameRequest(game_id=game.id).model_dump(),
         )
@@ -87,7 +87,7 @@ def create_and_join_teams(
     for team, members in zip(teams, itertools.batched(users, 2), strict=True):
         for member in members:
             res = client.post(
-                "/team/join",
+                "/api/team/join",
                 headers={"Authorization": f"Bearer {authenticated_users[member]}"},
                 json=UpdateTeamRequest(
                     team_number=team.team_number, game_id=team.game_id
@@ -102,7 +102,7 @@ def start_game(
     client: HTTPClient, auth_token: str, game_id: int
 ) -> GameStatePlayerScoped:
     res = client.post(
-        "/game/start",
+        "/api/game/start",
         headers={"Authorization": f"Bearer {auth_token}"},
         json=GameRequest(game_id=game_id).model_dump(),
     )
@@ -120,7 +120,7 @@ def do_bidding(
     for _ in range(len(game_state.order.order)):
         player_id = game_state.order[game_state.turn].player_id
         res = client.post(
-            "/game/bid",
+            "/api/game/bid",
             headers={"Authorization": f"Bearer {authenticated_users[player_id]}"},
             json=BidRequest(game_id=game_state.game_id, amount=2).model_dump(),
         )
@@ -138,7 +138,7 @@ def fetch_player_state(
     game_id: int,
 ) -> GameStatePlayerScoped:
     res = client.get(
-        f"/game/{game_id}/state",
+        f"/api/game/{game_id}/state",
         headers={"Authorization": f"Bearer {auth_token}"},
     )
     assert res.status_code == HTTPStatus.OK, f"Failed to fetch state: {res.text}"
@@ -167,7 +167,7 @@ def play_trick(
                 break
 
         res = client.post(
-            "/game/trick/play",
+            "/api/game/trick/play",
             headers={"Authorization": f"Bearer {auth_token}"},
             json=PlayCardRequest(
                 game_id=game_state.game_id,

@@ -40,7 +40,7 @@ class GoogleOIDC(OAuthProvider):
     @property
     @override
     def redirect_uri(self) -> str:
-        return f"{self.settings.base_url}/auth/google/callback"
+        return f"{self.settings.base_url}/api/auth/google/callback"
 
     @property
     @override

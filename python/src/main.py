@@ -19,6 +19,8 @@ from src.game.exceptions import InvalidGameStateException, invalid_game_state_ha
 from src.game.manager import GameManager
 from src.game.sse import ConnectionManager, RedisSubscriber
 
+API_PREFIX = "/api"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -80,14 +82,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         secret_key=settings.session_secret,
         https_only=settings.app_env == AppEnv.PROD,
     )
-    app.include_router(src.auth.routes.router)
+    app.include_router(src.auth.routes.router, prefix=API_PREFIX)
     if settings.dev_auth_enabled:
-        app.include_router(src.auth.dev_routes.router)
-    app.include_router(src.game.routes.router)
+        app.include_router(src.auth.dev_routes.router, prefix=API_PREFIX)
+    app.include_router(src.game.routes.router, prefix=API_PREFIX)
 
     app.add_exception_handler(InvalidGameStateException, invalid_game_state_handler)
 
-    @app.get("/health")
+    @app.get(f"{API_PREFIX}/health")
     async def health_check():
         """Health check endpoint for monitoring and testing."""
         return {"status": "healthy"}
