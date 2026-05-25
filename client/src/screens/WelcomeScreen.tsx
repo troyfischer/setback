@@ -31,6 +31,7 @@ export function WelcomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const googleEnabled = authOptions?.oauth_providers.includes("google") ?? true;
   const guestEnabled = authOptions?.dev_auth_enabled ?? false;
+  const showAdvancedControls = guestEnabled;
 
   async function runAction(label: string, action: () => Promise<void>) {
     setBusyAction(label);
@@ -110,15 +111,17 @@ export function WelcomeScreen() {
           }}
         />
 
-        <button
-          type="button"
-          onClick={() => setShowAdvanced((v) => !v)}
-          className="self-center text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-slate-600 dark:text-slate-400/70 dark:hover:text-blue-100 transition-colors"
-        >
-          {showAdvanced ? "Hide options" : "More options"}
-        </button>
+        {showAdvancedControls && (
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((v) => !v)}
+            className="self-center text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-slate-600 dark:text-slate-400/70 dark:hover:text-blue-100 transition-colors"
+          >
+            {showAdvanced ? "Hide options" : "More options"}
+          </button>
+        )}
 
-        {showAdvanced && (
+        {showAdvancedControls && showAdvanced && (
           <div className="flex flex-col gap-4 border-t border-slate-200/60 dark:border-white/[0.08] pt-5">
             {guestEnabled && (
               <>

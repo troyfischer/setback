@@ -402,10 +402,10 @@ export function LobbyScreen() {
                   {lobbyState.players.map((player) => (
                     <div
                       key={player}
-                      className="flex min-h-14 items-center rounded-2xl border border-slate-200/80 bg-white/55 px-4 py-3 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.05]"
+                      className="flex min-h-14 min-w-0 items-center rounded-2xl border border-slate-200/80 bg-white/55 px-4 py-3 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.05]"
                     >
-                      <div className="inline-flex items-center justify-center rounded-full bg-blue-300 px-3 py-1.5 text-xs font-extrabold text-blue-950 dark:bg-blue-700 dark:text-blue-100">
-                        <span className="font-semibold text-gray-900 dark:text-white">
+                      <div className="inline-flex max-w-full min-w-0 items-center justify-center rounded-full bg-blue-300 px-3 py-1.5 text-xs font-extrabold text-blue-950 dark:bg-blue-700 dark:text-blue-100">
+                        <span className="truncate font-semibold text-gray-900 dark:text-white">
                           {player}
                         </span>
                       </div>
