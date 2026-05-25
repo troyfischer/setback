@@ -14,9 +14,7 @@ from src.auth.limits import (
     auth_refresh_rate_limit,
 )
 from src.auth.models import AuthOptions, RefreshToken, Token
-from src.auth.sso import GoogleOIDC
-from src.auth.sso.base import OAuthProvider
-from src.auth.sso.models import OAuthUser
+from src.auth.providers import GoogleOIDC, OAuthProvider, OAuthUser
 from src.auth.utils import get_current_user
 from src.db import DBSession
 from src.request import RequestContext

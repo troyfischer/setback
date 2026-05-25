@@ -7,7 +7,7 @@ from sqlalchemy import engine_from_config, pool
 from sqlmodel import SQLModel
 
 import src.auth.models  # noqa: F401
-import src.auth.sso.models  # noqa: F401
+import src.auth.providers.models  # noqa: F401
 import src.game.models  # noqa: F401
 from src.config import Settings
 

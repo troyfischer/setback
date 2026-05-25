@@ -7,7 +7,7 @@ from fastapi import (
 )
 from sqlmodel import select
 
-from src.auth.sso.models import OAuthUser
+from src.auth.providers.models import OAuthUser
 from src.auth.utils import get_current_user
 from src.db import DBSession
 from src.game.models import (

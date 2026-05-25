@@ -5,8 +5,8 @@ from starlette.requests import Request
 
 from src.auth.models import Credentials
 from src.config import Settings
-from src.auth.sso.base import OAuthProvider, oauth
-from src.auth.sso.models import OAuthUser
+from src.auth.providers.base import OAuthProvider, oauth
+from src.auth.providers.models import OAuthUser
 
 
 class GoogleOIDCSettings(BaseSettings):

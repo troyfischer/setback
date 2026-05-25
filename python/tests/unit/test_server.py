@@ -25,7 +25,7 @@ os.environ.setdefault("GOOGLE_CLIENT_SECRET", "test-google-client-secret")
 import src.game.routes.game as game_routes
 import src.rate_limit as rate_limit
 from src.auth import routes as auth_routes
-from src.auth.sso.models import OAuthUser
+from src.auth.providers import OAuthUser
 from src.config import AppEnv, Settings
 from src.game.events import GameEvent
 from src.game.manager import GameStatePlayerScoped, Phase

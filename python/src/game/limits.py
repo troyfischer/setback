@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
-from src.auth.sso.models import OAuthUser
+from src.auth.providers.models import OAuthUser
 from src.auth.utils import get_current_user
 from src.rate_limit import enforce_limit, get_client_ip
 from src.request import RequestContext

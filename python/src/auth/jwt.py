@@ -9,7 +9,7 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt  # type: ignore[import-untyped]
 
-from src.auth.models import Claims
+from src.auth.models import AccessClaims, RefreshClaims, SSEClaims
 from src.config import Settings
 
 
@@ -50,11 +50,11 @@ class JWT:
         )
         return encoded_jwt
 
-    def _validate(self, credentials: str, typ: str) -> Claims:
+    def _validate(self, credentials: str, typ: str) -> AccessClaims:
         exc = HTTPException(401, f"Invalid {typ} token")
         try:
-            claims: Claims = cast(
-                Claims,
+            claims: AccessClaims = cast(
+                AccessClaims,
                 cast(
                     object,
                     jwt.decode(
@@ -108,11 +108,14 @@ class JWT:
 
     def validate_access_token(
         self, credentials: HTTPAuthorizationCredentials
-    ) -> Claims:
+    ) -> AccessClaims:
         return self._validate(credentials.credentials, TokenType.ACCESS)
 
-    def validate_refresh_token(self, token: str) -> Claims:
-        return self._validate(token, TokenType.REFRESH)
+    def validate_refresh_token(self, token: str) -> RefreshClaims:
+        claims = cast(RefreshClaims, self._validate(token, TokenType.REFRESH))
+        if not isinstance(claims.get("jti"), str):
+            raise HTTPException(401, "Invalid refresh token")
+        return claims
 
     def validate_sse_token(
         self,
@@ -120,8 +123,8 @@ class JWT:
         *,
         expected_game_id: str,
         expected_audience: str,
-    ) -> Claims:
-        claims = self._validate(token, TokenType.SSE)
+    ) -> SSEClaims:
+        claims = cast(SSEClaims, self._validate(token, TokenType.SSE))
         exc = HTTPException(401, "Invalid sse token")
 
         game_id = claims.get("game_id")

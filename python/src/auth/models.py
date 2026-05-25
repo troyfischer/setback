@@ -5,11 +5,24 @@ from pydantic import BaseModel, ConfigDict
 from sqlmodel import Field, SQLModel
 
 
-class Claims(TypedDict):
+class _BaseClaims(TypedDict):
     sub: str
     exp: datetime | None
     typ: str
-    game_id: NotRequired[int]
+
+
+class AccessClaims(_BaseClaims):
+    """Standard login claims"""
+
+
+class RefreshClaims(_BaseClaims):
+    """Refresh token claims"""
+
+    jti: str
+
+
+class SSEClaims(_BaseClaims):
+    game_id: str
     aud: NotRequired[str]
     jti: NotRequired[str]
 

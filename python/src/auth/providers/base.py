@@ -6,7 +6,7 @@ from authlib.integrations.starlette_client import (  # pyright: ignore[reportMis
 from starlette.config import Config
 from starlette.requests import Request
 
-from src.auth.sso.models import OAuthUser
+from src.auth.providers.models import OAuthUser
 
 config = Config()
 oauth = OAuth(config=config)  # type: ignore[no-untyped-call]

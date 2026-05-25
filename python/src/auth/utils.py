@@ -4,8 +4,8 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.auth.jwt import JWT, JwtManager, get_jwt_manager
-from src.auth.models import Claims
-from src.auth.sso.models import OAuthUser
+from src.auth.models import AccessClaims
+from src.auth.providers.models import OAuthUser
 from src.db import DBSession
 
 
@@ -13,7 +13,7 @@ async def validate_access_token(
     request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(JWT.security)],
     jwt: Annotated[JwtManager, Depends(get_jwt_manager)],
-) -> Claims:
+) -> AccessClaims:
     """
     Authentication check on the provided credentials
     """
@@ -25,7 +25,7 @@ async def validate_access_token(
 
 async def get_current_user(
     request: Request,
-    claims: Annotated[Claims, Depends(validate_access_token)],
+    claims: Annotated[AccessClaims, Depends(validate_access_token)],
     db: DBSession,
 ) -> OAuthUser:
     user = db.get(OAuthUser, claims["sub"])

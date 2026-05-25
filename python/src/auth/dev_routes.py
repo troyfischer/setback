@@ -10,7 +10,7 @@ from src.auth.cookies import set_refresh_cookie
 from src.auth.jwt import JwtManager
 from src.auth.limits import auth_dev_token_rate_limit
 from src.auth.models import RefreshToken, Token
-from src.auth.sso.models import OAuthUser
+from src.auth.providers import OAuthUser
 from src.db import DBSession
 
 router = APIRouter(prefix="/auth", tags=["auth-dev"])

@@ -14,7 +14,7 @@ from pydantic import BaseModel, ValidationError
 from sqlmodel import Session, col, func, select
 
 from src.auth.jwt import JwtManager
-from src.auth.sso.models import OAuthUser
+from src.auth.providers.models import OAuthUser
 from src.auth.utils import get_current_user
 from src.db import DBSession
 from src.game.limits import game_join_rate_limit, subscribe_token_rate_limit
@@ -185,7 +185,7 @@ class SubscribeTokenResponse(BaseModel):
 async def sse_event_stream(
     game_id: str,
     player_id: str,
-    queue: asyncio.Queue[dict[str, object] | None],
+    queue: asyncio.Queue[dict[str, object]],
     connection_manager: ConnectionManager,
     *,
     heartbeat_seconds: float = SSE_HEARTBEAT_SECONDS,
@@ -199,8 +199,6 @@ async def sse_event_stream(
                     queue.get(),
                     timeout=heartbeat_seconds,
                 )
-                if message is None:
-                    break
                 data = json.dumps(message)
                 yield f"data: {data}\n\n"
             except TimeoutError:
@@ -317,11 +315,6 @@ def get_lobby_state(
         select(TeamMember).where(TeamMember.game_id == game_id)
     ).all()
     players = db.exec(select(Player).where(Player.game_id == game_id)).all()
-    player_ids = [p.id for p in players]
-    oauth_users = db.exec(select(OAuthUser).where(col(OAuthUser.sub).in_(player_ids))).all()
-    player_names = {
-        user.sub: user.given_name or user.name or user.sub for user in oauth_users
-    }
 
     members_by_team: dict[int, list[str]] = {}
     for m in team_members:
@@ -339,8 +332,7 @@ def get_lobby_state(
             )
             for t in teams
         ],
-        players=player_ids,
-        player_names=player_names,
+        players=[p.id for p in players],
         game_status=game.status,
     )
 
