@@ -31,7 +31,11 @@ from src.game.models import (
     TeamWithMembers,
 )
 from src.game.scope import scope_state_for_player
-from src.game.sse import ConnectionManager, SSEConnectionLimitExceeded
+from src.game.sse import (
+    ClientQueue,
+    ConnectionManager,
+    SSEConnectionLimitExceeded,
+)
 from src.game.utils import get_game, get_player_in_game, require_owner
 from src.request import RequestContext
 
@@ -185,7 +189,7 @@ class SubscribeTokenResponse(BaseModel):
 async def sse_event_stream(
     game_id: str,
     player_id: str,
-    queue: asyncio.Queue[dict[str, object]],
+    queue: ClientQueue,
     connection_manager: ConnectionManager,
     *,
     heartbeat_seconds: float = SSE_HEARTBEAT_SECONDS,
@@ -269,7 +273,7 @@ async def game_subscribe(
     )
 
     # Use a short-lived session for validation so we don't hold a pool
-    # connection for the lifetime of the SSE stream.
+    # connection for the lifetime of the SSE stream
     with Session(ctx.db) as db:
         game = db.get(Game, game_id)
         if not game:
@@ -315,6 +319,10 @@ def get_lobby_state(
         select(TeamMember).where(TeamMember.game_id == game_id)
     ).all()
     players = db.exec(select(Player).where(Player.game_id == game_id)).all()
+    player_ids = [p.id for p in players]
+    oauth_users = db.exec(
+        select(OAuthUser).where(col(OAuthUser.sub).in_(player_ids))
+    ).all()
 
     members_by_team: dict[int, list[str]] = {}
     for m in team_members:
@@ -332,7 +340,8 @@ def get_lobby_state(
             )
             for t in teams
         ],
-        players=[p.id for p in players],
+        players=player_ids,
+        player_names={u.sub: u.name for u in oauth_users},
         game_status=game.status,
     )
 

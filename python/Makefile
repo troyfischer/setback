@@ -12,6 +12,8 @@ DEV_ENV = \
 	GOOGLE_CLIENT_SECRET=dev-google-client-secret \
 	POSTGRES_PASSWORD=dev-postgres-password
 
+COMPOSE = $(DEV_ENV) docker compose
+
 init:
 	uv sync --all-extras
 
@@ -34,7 +36,7 @@ utest:
 
 itest:
 	@echo "Stopping any existing containers..."
-	@docker compose down -v 2>/dev/null || true
+	@$(COMPOSE) down -v 2>/dev/null || true
 	uv run pytest tests/integration -v
 
 itest-remote:
@@ -49,16 +51,16 @@ test-all:
 	uv run pytest tests -v
 
 dev-up:
-	$(DEV_ENV) docker compose up -d
+	$(COMPOSE) up -d
 
 dev-rebuild:
-	$(DEV_ENV) docker compose up -d --build
+	$(COMPOSE) up -d --build
 
 dev-down:
-	docker compose down
+	$(COMPOSE) down
 
 clean:
-	docker compose down -v
+	$(COMPOSE) down -v
 	docker system prune -f
 
 lint:
