@@ -5,9 +5,9 @@ Setback is a multiplayer card game app for running a shared family-style game ta
 ## Notes
 This is a personal project to appreciate the nuance of deploying a web app from scratch.
 
-Covers a few concepts I wanted more hands on experience with:
-1. Server pub/sub via redis
-2. Database management and ORMs in python
-3. OIDC through common providers like Google
-4. JWT & refresh token issuance / management
+This project covers a few concepts I wanted more hands on experience with:
+1. Client SSE subscriptions backed by server side redis pub/sub
+2. Database management and ORM backed persistence in python
+3. OIDC with common identity providers like Google
+4. JWT issuance and refresh-token management
 5. Infra management with pulumi
